@@ -2820,6 +2820,8 @@
         <div id="queue-someday"></div>
       </div>
 
+      <div id="queue-loading" style="text-align:center;color:var(--ink-mute);font-size:12px;font-style:italic;padding:16px;">Loading your data…</div>
+
       <div class="queue-add-row">
         <button class="queue-add-btn" onclick="openTaskModal('general')">+ Add task</button>
       </div>
@@ -2915,8 +2917,8 @@
     <!-- ━━━━━━━━━━━━━━━━ PIPELINE — PRE-RENDERED, NO JS REQUIRED ━━━━━━━━━━━━━━━━ -->
     <section class="section">
       <div class="section-head">
-        <div class="section-title">Active pipeline <span class="section-count">11 deals</span></div>
-        <a class="section-action">Open full pipeline →</a>
+        <div class="section-title">Active pipeline <span class="section-count" id="pipeline-count">0 deals</span></div>
+        <a class="section-action" onclick="openDealModal()" style="cursor:pointer;">+ Add deal</a>
       </div>
 
       <div class="pipeline-summary">
@@ -2937,6 +2939,12 @@
         <div class="pipeline-pace">Q2 pace: <span class="pace-good">+12%</span> vs target</div>
       </div>
 
+      <div id="pipeline-empty" style="display:none;background:white;border:1.5px dashed var(--line);border-radius:var(--r-md);padding:40px;text-align:center;margin-bottom:14px;">
+        <div style="font-size:32px;margin-bottom:8px;">🏗️</div>
+        <div style="font-family:var(--font-serif);font-size:17px;margin-bottom:6px;">Your pipeline is empty</div>
+        <div style="font-size:12px;color:var(--ink-mute);margin-bottom:14px;">Add your first real deal — it saves to your database and survives forever.</div>
+        <button class="btn primary" onclick="openDealModal()">+ Add your first deal</button>
+      </div>
       <div class="pipeline-table">
         <div class="pipeline-thead">
           <div>Status</div>
@@ -2973,34 +2981,7 @@
             </div>
             <div class="status-header-meta status-header-totals"><span class="status-value" data-role="deal-total">$82M</span> · <span class="status-value status-fee-value" data-role="fee-total">—</span></div>
           </div>
-          <div class="status-rows">
-            <div class="pipeline-row" data-id="d001" data-amount="54000000" data-fee="540000">
-              <select class="row-status-select" data-status="preparing" onchange="changeStatus('d001', this.value, this)">
-                <option value="prospecting">Prospecting</option><option value="preparing" selected>Preparing BOV</option><option value="submitted">BOV Submitted</option><option value="premarket">Pre-Marketing</option><option value="onmarket">On-Market</option><option value="offmarket">Off-Market</option><option value="awarded">Awarded/Exclusivity</option><option value="undercontract">Under Contract</option><option value="closing">In Closing</option><option value="closed">Closed</option><option value="lost">Lost/Abandoned</option>
-              </select>
-              <div class="row-deal-name">Edgewater 4-acre tower site</div>
-              <div><span class="deal-type-tag dt-land">Land</span></div>
-              <div class="row-text">Mast Capital</div>
-              <div class="row-text">Edgewater, Miami</div>
-              <div><span class="row-initials">DF</span></div>
-              <div class="row-num">$54M</div>
-              <div class="row-fee">$540K</div>
-              <div class="row-next" id="next-d001"></div>
-            </div>
-            <div class="pipeline-row" data-id="d002" data-amount="28000000" data-fee="280000">
-              <select class="row-status-select" data-status="preparing" onchange="changeStatus('d002', this.value, this)">
-                <option value="prospecting">Prospecting</option><option value="preparing" selected>Preparing BOV</option><option value="submitted">BOV Submitted</option><option value="premarket">Pre-Marketing</option><option value="onmarket">On-Market</option><option value="offmarket">Off-Market</option><option value="awarded">Awarded/Exclusivity</option><option value="undercontract">Under Contract</option><option value="closing">In Closing</option><option value="closed">Closed</option><option value="lost">Lost/Abandoned</option>
-              </select>
-              <div class="row-deal-name">Hollywood Young Circle parcel</div>
-              <div><span class="deal-type-tag dt-land">Land</span></div>
-              <div class="row-text">BTI Partners</div>
-              <div class="row-text">Hollywood</div>
-              <div><span class="row-initials">DF/RC</span></div>
-              <div class="row-num">$28M</div>
-              <div class="row-fee">$280K</div>
-              <div class="row-next" id="next-d002"></div>
-            </div>
-          </div>
+          <div class="status-rows"></div>
         </div>
 
         <!-- BOV Submitted -->
@@ -3013,21 +2994,7 @@
             </div>
             <div class="status-header-meta status-header-totals"><span class="status-value" data-role="deal-total">$32M</span> · <span class="status-value status-fee-value" data-role="fee-total">—</span></div>
           </div>
-          <div class="status-rows">
-            <div class="pipeline-row" data-id="d003" data-amount="32000000" data-fee="320000">
-              <select class="row-status-select" data-status="submitted" onchange="changeStatus('d003', this.value, this)">
-                <option value="prospecting">Prospecting</option><option value="preparing">Preparing BOV</option><option value="submitted" selected>BOV Submitted</option><option value="premarket">Pre-Marketing</option><option value="onmarket">On-Market</option><option value="offmarket">Off-Market</option><option value="awarded">Awarded/Exclusivity</option><option value="undercontract">Under Contract</option><option value="closing">In Closing</option><option value="closed">Closed</option><option value="lost">Lost/Abandoned</option>
-              </select>
-              <div class="row-deal-name">Boca Glades Rd mixed-use</div>
-              <div><span class="deal-type-tag dt-land">Land</span></div>
-              <div class="row-text">Penn-Florida</div>
-              <div class="row-text">Boca Raton</div>
-              <div><span class="row-initials">DF</span></div>
-              <div class="row-num">$32M</div>
-              <div class="row-fee">$320K</div>
-              <div class="row-next" id="next-d003"></div>
-            </div>
-          </div>
+          <div class="status-rows"></div>
         </div>
 
         <!-- Pre-Marketing -->
@@ -3040,21 +3007,7 @@
             </div>
             <div class="status-header-meta status-header-totals"><span class="status-value" data-role="deal-total">$48M</span> · <span class="status-value status-fee-value" data-role="fee-total">—</span></div>
           </div>
-          <div class="status-rows">
-            <div class="pipeline-row" data-id="d004" data-amount="48000000" data-fee="480000">
-              <select class="row-status-select" data-status="premarket" onchange="changeStatus('d004', this.value, this)">
-                <option value="prospecting">Prospecting</option><option value="preparing">Preparing BOV</option><option value="submitted">BOV Submitted</option><option value="premarket" selected>Pre-Marketing</option><option value="onmarket">On-Market</option><option value="offmarket">Off-Market</option><option value="awarded">Awarded/Exclusivity</option><option value="undercontract">Under Contract</option><option value="closing">In Closing</option><option value="closed">Closed</option><option value="lost">Lost/Abandoned</option>
-              </select>
-              <div class="row-deal-name">Aventura 4.2-acre site</div>
-              <div><span class="deal-type-tag dt-land">Land</span></div>
-              <div class="row-text">Aventura LLC</div>
-              <div class="row-text">Aventura</div>
-              <div><span class="row-initials">DF/SB</span></div>
-              <div class="row-num">$48M</div>
-              <div class="row-fee">$480K</div>
-              <div class="row-next" id="next-d004"></div>
-            </div>
-          </div>
+          <div class="status-rows"></div>
         </div>
 
         <!-- On-Market -->
@@ -3067,34 +3020,7 @@
             </div>
             <div class="status-header-meta status-header-totals"><span class="status-value" data-role="deal-total">$40.5M</span> · <span class="status-value status-fee-value" data-role="fee-total">—</span></div>
           </div>
-          <div class="status-rows">
-            <div class="pipeline-row" data-id="d005" data-amount="22000000" data-fee="220000">
-              <select class="row-status-select" data-status="onmarket" onchange="changeStatus('d005', this.value, this)">
-                <option value="prospecting">Prospecting</option><option value="preparing">Preparing BOV</option><option value="submitted">BOV Submitted</option><option value="premarket">Pre-Marketing</option><option value="onmarket" selected>On-Market</option><option value="offmarket">Off-Market</option><option value="awarded">Awarded/Exclusivity</option><option value="undercontract">Under Contract</option><option value="closing">In Closing</option><option value="closed">Closed</option><option value="lost">Lost/Abandoned</option>
-              </select>
-              <div class="row-deal-name">Pompano 12-acre assembly</div>
-              <div><span class="deal-type-tag dt-land">Land</span></div>
-              <div class="row-text">Multiple owners</div>
-              <div class="row-text">Pompano Beach</div>
-              <div><span class="row-initials">DF</span></div>
-              <div class="row-num">$22M</div>
-              <div class="row-fee">$220K</div>
-              <div class="row-next" id="next-d005"></div>
-            </div>
-            <div class="pipeline-row" data-id="d006" data-amount="18500000" data-fee="185000">
-              <select class="row-status-select" data-status="onmarket" onchange="changeStatus('d006', this.value, this)">
-                <option value="prospecting">Prospecting</option><option value="preparing">Preparing BOV</option><option value="submitted">BOV Submitted</option><option value="premarket">Pre-Marketing</option><option value="onmarket" selected>On-Market</option><option value="offmarket">Off-Market</option><option value="awarded">Awarded/Exclusivity</option><option value="undercontract">Under Contract</option><option value="closing">In Closing</option><option value="closed">Closed</option><option value="lost">Lost/Abandoned</option>
-              </select>
-              <div class="row-deal-name">Wynwood 1.6-acre dev site</div>
-              <div><span class="deal-type-tag dt-land">Land</span></div>
-              <div class="row-text">2701 NW 5th LLC</div>
-              <div class="row-text">Wynwood</div>
-              <div><span class="row-initials">DF/RC</span></div>
-              <div class="row-num">$18.5M</div>
-              <div class="row-fee">$185K</div>
-              <div class="row-next" id="next-d006"></div>
-            </div>
-          </div>
+          <div class="status-rows"></div>
         </div>
 
         <!-- Off-Market -->
@@ -3107,21 +3033,7 @@
             </div>
             <div class="status-header-meta status-header-totals"><span class="status-value" data-role="deal-total">$9M</span> · <span class="status-value status-fee-value" data-role="fee-total">—</span></div>
           </div>
-          <div class="status-rows">
-            <div class="pipeline-row" data-id="d007" data-amount="9000000" data-fee="90000">
-              <select class="row-status-select" data-status="offmarket" onchange="changeStatus('d007', this.value, this)">
-                <option value="prospecting">Prospecting</option><option value="preparing">Preparing BOV</option><option value="submitted">BOV Submitted</option><option value="premarket">Pre-Marketing</option><option value="onmarket">On-Market</option><option value="offmarket" selected>Off-Market</option><option value="awarded">Awarded/Exclusivity</option><option value="undercontract">Under Contract</option><option value="closing">In Closing</option><option value="closed">Closed</option><option value="lost">Lost/Abandoned</option>
-              </select>
-              <div class="row-deal-name">Sunrise 7-acre site</div>
-              <div><span class="deal-type-tag dt-land">Land</span></div>
-              <div class="row-text">Caroline Holdings</div>
-              <div class="row-text">Sunrise</div>
-              <div><span class="row-initials">DF</span></div>
-              <div class="row-num">$9M</div>
-              <div class="row-fee">$90K</div>
-              <div class="row-next" id="next-d007"></div>
-            </div>
-          </div>
+          <div class="status-rows"></div>
         </div>
 
         <!-- Awarded/Exclusivity -->
@@ -3134,21 +3046,7 @@
             </div>
             <div class="status-header-meta status-header-totals"><span class="status-value" data-role="deal-total">$12M</span> · <span class="status-value status-fee-value" data-role="fee-total">—</span></div>
           </div>
-          <div class="status-rows">
-            <div class="pipeline-row" data-id="d008" data-amount="12000000" data-fee="120000">
-              <select class="row-status-select" data-status="awarded" onchange="changeStatus('d008', this.value, this)">
-                <option value="prospecting">Prospecting</option><option value="preparing">Preparing BOV</option><option value="submitted">BOV Submitted</option><option value="premarket">Pre-Marketing</option><option value="onmarket">On-Market</option><option value="offmarket">Off-Market</option><option value="awarded" selected>Awarded/Exclusivity</option><option value="undercontract">Under Contract</option><option value="closing">In Closing</option><option value="closed">Closed</option><option value="lost">Lost/Abandoned</option>
-              </select>
-              <div class="row-deal-name">WPB Australian Ave parcel</div>
-              <div><span class="deal-type-tag dt-mf">Multifamily</span></div>
-              <div class="row-text">The Breakers</div>
-              <div class="row-text">West Palm Beach</div>
-              <div><span class="row-initials">DF/SB</span></div>
-              <div class="row-num">$12M</div>
-              <div class="row-fee">$120K</div>
-              <div class="row-next" id="next-d008"></div>
-            </div>
-          </div>
+          <div class="status-rows"></div>
         </div>
 
         <!-- Under Contract -->
@@ -3161,34 +3059,7 @@
             </div>
             <div class="status-header-meta status-header-totals"><span class="status-value" data-role="deal-total">$62M</span> · <span class="status-value status-fee-value" data-role="fee-total">—</span></div>
           </div>
-          <div class="status-rows">
-            <div class="pipeline-row" data-id="d009" data-amount="48000000" data-fee="480000">
-              <select class="row-status-select" data-status="undercontract" onchange="changeStatus('d009', this.value, this)">
-                <option value="prospecting">Prospecting</option><option value="preparing">Preparing BOV</option><option value="submitted">BOV Submitted</option><option value="premarket">Pre-Marketing</option><option value="onmarket">On-Market</option><option value="offmarket">Off-Market</option><option value="awarded">Awarded/Exclusivity</option><option value="undercontract" selected>Under Contract</option><option value="closing">In Closing</option><option value="closed">Closed</option><option value="lost">Lost/Abandoned</option>
-              </select>
-              <div class="row-deal-name">Aventura entitled MF site</div>
-              <div><span class="deal-type-tag dt-mf">Multifamily</span></div>
-              <div class="row-text">Mast Capital</div>
-              <div class="row-text">Aventura</div>
-              <div><span class="row-initials">DF</span></div>
-              <div class="row-num">$48M</div>
-              <div class="row-fee">$480K</div>
-              <div class="row-next" id="next-d009"></div>
-            </div>
-            <div class="pipeline-row" data-id="d010" data-amount="14000000" data-fee="140000">
-              <select class="row-status-select" data-status="undercontract" onchange="changeStatus('d010', this.value, this)">
-                <option value="prospecting">Prospecting</option><option value="preparing">Preparing BOV</option><option value="submitted">BOV Submitted</option><option value="premarket">Pre-Marketing</option><option value="onmarket">On-Market</option><option value="offmarket">Off-Market</option><option value="awarded">Awarded/Exclusivity</option><option value="undercontract" selected>Under Contract</option><option value="closing">In Closing</option><option value="closed">Closed</option><option value="lost">Lost/Abandoned</option>
-              </select>
-              <div class="row-deal-name">Hialeah industrial parcel</div>
-              <div><span class="deal-type-tag dt-other">Other</span></div>
-              <div class="row-text">S. Cohen Industrial</div>
-              <div class="row-text">Hialeah</div>
-              <div><span class="row-initials">DF</span></div>
-              <div class="row-num">$14M</div>
-              <div class="row-fee">$140K</div>
-              <div class="row-next" id="next-d010"></div>
-            </div>
-          </div>
+          <div class="status-rows"></div>
         </div>
 
         <!-- In Closing -->
@@ -3201,21 +3072,7 @@
             </div>
             <div class="status-header-meta status-header-totals"><span class="status-value" data-role="deal-total">$19M</span> · <span class="status-value status-fee-value" data-role="fee-total">—</span></div>
           </div>
-          <div class="status-rows">
-            <div class="pipeline-row" data-id="d011" data-amount="19000000" data-fee="190000">
-              <select class="row-status-select" data-status="closing" onchange="changeStatus('d011', this.value, this)">
-                <option value="prospecting">Prospecting</option><option value="preparing">Preparing BOV</option><option value="submitted">BOV Submitted</option><option value="premarket">Pre-Marketing</option><option value="onmarket">On-Market</option><option value="offmarket">Off-Market</option><option value="awarded">Awarded/Exclusivity</option><option value="undercontract">Under Contract</option><option value="closing" selected>In Closing</option><option value="closed">Closed</option><option value="lost">Lost/Abandoned</option>
-              </select>
-              <div class="row-deal-name">Doral 9-acre flex site</div>
-              <div><span class="deal-type-tag dt-other">Other</span></div>
-              <div class="row-text">Butters Construction</div>
-              <div class="row-text">Doral</div>
-              <div><span class="row-initials">DF/RC</span></div>
-              <div class="row-num">$19M</div>
-              <div class="row-fee">$190K</div>
-              <div class="row-next" id="next-d011"></div>
-            </div>
-          </div>
+          <div class="status-rows"></div>
         </div>
 
       </div>
@@ -3639,6 +3496,12 @@
 
   function commitChange(dealId, dealName, newStatus, oldStatus, selectEl) {
     selectEl.setAttribute('data-status', newStatus);
+    var dealRec = DEALS.find(function(x) { return x.id === dealId; });
+    if (dealRec) {
+      dealRec.status = newStatus;
+      if (gateData[dealId]) dealRec.gateData = gateData[dealId];
+      persistDeal(dealId, { status: newStatus, gate_data: dealRec.gateData || {} });
+    }
     if (newStatus === 'closed' || newStatus === 'lost') {
       var row = document.querySelector('.pipeline-row[data-id="' + dealId + '"]');
       if (row) row.style.display = 'none';
@@ -3656,6 +3519,8 @@
                 'Changed from ' + STATUS_LABELS[oldStatus] + '. Salesforce + email actions would be queued.');
     }
     recalculateSummary();
+    renderNextActions();
+    updateSummaryBar();
   }
 
   function fmtMoney(n) {
@@ -4868,7 +4733,7 @@
     }
     // Auto-create Owed response task if follow-up date was set
     if (followUpBy) {
-      TASKS.push({
+      var fuTask = {
         id: 't' + Date.now().toString(36),
         type: 'owed-response',
         title: 'Follow up: ' + title,
@@ -4877,7 +4742,11 @@
         followUpBy: followUpBy,
         createdOn: date,
         done: false
-      });
+      };
+      TASKS.push(fuTask);
+      if (window._db && window._db.insertTask) {
+        window._db.insertTask(fuTask).then(function(row) { if (row) fuTask.id = row.id; renderActionCenter(); });
+      }
       if (typeof renderActionCenter === 'function') renderActionCenter();
     }
     renderContactProfile(contactId);
@@ -4975,46 +4844,17 @@
 
   // Task types: owed-response, deal-followup, general
   // Optional links: dealId (to Pipeline), contactId (to Contacts), followUpBy (date)
-  var TASKS = [
-    // OWED RESPONSES
-    { id: 't1', type: 'owed-response', title: 'Reply re: Hialeah parcel pricing — second follow-up',
-      contactId: 'p-s-cohen', dealId: 'd010', followUpBy: '2026-05-14', createdOn: '2026-05-12', done: false },
-    { id: 't2', type: 'owed-response', title: 'Reply to Brad on bridge program parameters (25-45 pt term)',
-      contactId: 'p-brad-lyons', dealId: null, followUpBy: '2026-04-25', createdOn: '2026-04-21', done: false },
-    { id: 't3', type: 'owed-response', title: 'Forward Doral comp set — requested yesterday',
-      contactId: null, dealId: 'd011', followUpBy: '2026-05-14', createdOn: '2026-05-13', done: false, extraLabel: 'J. Mendez' },
-
-    // DEAL FOLLOW-UPS
-    { id: 't4', type: 'deal-followup', title: 'Send LOI to Aventura ownership group',
-      contactId: null, dealId: 'd004', followUpBy: '2026-05-15', createdOn: '2026-05-12', done: false },
-    { id: 't5', type: 'deal-followup', title: 'Call ownership of 7-acre Sunrise site',
-      contactId: null, dealId: 'd007', followUpBy: '2026-05-16', createdOn: '2026-05-13', done: false },
-    { id: 't6', type: 'deal-followup', title: 'Prep BOV materials for Edgewater 4-acre tower site',
-      contactId: null, dealId: 'd001', followUpBy: '2026-05-18', createdOn: '2026-05-14', done: false },
-    { id: 't7', type: 'deal-followup', title: 'Follow up with BTI on Hollywood Young Circle timeline',
-      contactId: null, dealId: 'd002', followUpBy: '2026-05-20', createdOn: '2026-05-13', done: false },
-
-    // GENERAL TASKS
-    { id: 't8', type: 'general', title: 'Book flight for NMHC in June',
-      contactId: null, dealId: null, followUpBy: '2026-05-25', createdOn: '2026-05-01', done: false },
-    { id: 't9', type: 'general', title: 'Review Chestnut criteria update from Roberto',
-      contactId: 'f-chestnut', dealId: null, followUpBy: null, createdOn: '2026-05-08', done: false }
-  ];
+  var TASKS = [];   // hydrated from database after login
+  var DEALS = [];   // hydrated from database after login
 
   // Deal name lookup for task rendering (from seed data in Pipeline HTML)
-  var DEAL_NAMES = {
-    d001: 'Edgewater 4-acre tower site',
-    d002: 'Hollywood Young Circle parcel',
-    d003: 'Boca Glades Rd mixed-use',
-    d004: 'Aventura 4.2-acre site',
-    d005: 'Pompano 12-acre assembly',
-    d006: 'Wynwood 1.6-acre dev site',
-    d007: 'Sunrise 7-acre site',
-    d008: 'WPB Australian Ave parcel',
-    d009: 'Aventura entitled MF site',
-    d010: 'Hialeah industrial parcel',
-    d011: 'Doral 9-acre flex site'
-  };
+  function DEAL_NAME_MAP() {
+    var m = {};
+    DEALS.forEach(function(d) { m[d.id] = d.name; });
+    return m;
+  }
+  var DEAL_NAMES = {};   // refreshed by refreshDealNames()
+  function refreshDealNames() { DEAL_NAMES = DEAL_NAME_MAP(); }
 
   function _daysUntil(dateStr) {
     if (!dateStr) return null;
@@ -5074,6 +4914,159 @@
       '</div>' +
       '<div class="action-item-delete" onclick="event.stopPropagation();deleteTask(\'' + task.id + '\')">×</div>' +
     '</div>';
+  }
+
+  /* ══════════ DB-BACKED DEALS ══════════ */
+  var STATUS_OPTIONS = [
+    ['prospecting','Prospecting'],['preparing','Preparing BOV'],['submitted','BOV Submitted'],
+    ['premarket','Pre-Marketing'],['onmarket','On-Market'],['offmarket','Off-Market'],
+    ['awarded','Awarded/Exclusivity'],['undercontract','Under Contract'],['closing','In Closing'],
+    ['closed','Closed'],['lost','Lost/Abandoned']
+  ];
+  var TYPE_TAG = { 'Land': 'dt-land', 'Multifamily': 'dt-mf' };
+
+  function dealRowHtml(d) {
+    var opts = STATUS_OPTIONS.map(function(o) {
+      return '<option value="' + o[0] + '"' + (o[0] === d.status ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('');
+    var typeCls = TYPE_TAG[d.dealType] || 'dt-other';
+    var typeLabel = d.dealType || 'Other';
+    return '<div class="pipeline-row" data-id="' + d.id + '" data-amount="' + (d.amount || 0) + '" data-fee="' + (d.fee || 0) + '">' +
+      '<select class="row-status-select" data-status="' + d.status + '" onchange="changeStatus(\'' + d.id + '\', this.value, this)">' + opts + '</select>' +
+      '<div class="row-deal-name">' + escapeHtml(d.name) + '</div>' +
+      '<div><span class="deal-type-tag ' + typeCls + '">' + escapeHtml(typeLabel) + '</span></div>' +
+      '<div class="row-text">' + escapeHtml(d.client || '—') + '</div>' +
+      '<div class="row-text">' + escapeHtml(d.submarket || '—') + '</div>' +
+      '<div><span class="row-initials">' + escapeHtml(d.lead || 'DF') + '</span></div>' +
+      '<div class="row-num">' + fmtMoney(d.amount || 0) + '</div>' +
+      '<div class="row-fee">' + fmtMoney(d.fee || 0) + '</div>' +
+      '<div class="row-next" id="next-' + d.id + '"></div>' +
+    '</div>';
+  }
+
+  function renderDealRows() {
+    refreshDealNames();
+    // clear all section row containers
+    document.querySelectorAll('.status-section .status-rows').forEach(function(el) { el.innerHTML = ''; });
+    var visible = 0;
+    DEALS.forEach(function(d) {
+      if (d.status === 'closed' || d.status === 'lost') return; // archive/vault later
+      var container = document.querySelector('.status-section[data-status="' + d.status + '"] .status-rows');
+      if (!container) return;
+      container.insertAdjacentHTML('beforeend', dealRowHtml(d));
+      visible++;
+    });
+    var emptyMsg = document.getElementById('pipeline-empty');
+    if (emptyMsg) emptyMsg.style.display = visible === 0 ? 'block' : 'none';
+    recalculateSummary();
+    renderNextActions();
+    updateSummaryBar();
+  }
+
+  function updateSummaryBar() {
+    var active = DEALS.filter(function(d) { return d.status !== 'closed' && d.status !== 'lost'; });
+    var total = 0, fees = 0;
+    active.forEach(function(d) { total += Number(d.amount || 0); fees += Number(d.fee || 0); });
+    var bar = document.querySelector('.pipe-summary-bar');
+    if (!bar) return;
+    var nums = bar.querySelectorAll('.psb-num');
+    if (nums[0]) nums[0].textContent = active.length;
+    if (nums[1]) nums[1].textContent = fmtMoney(total);
+    if (nums[2]) nums[2].textContent = fmtMoney(fees);
+    var pc = document.getElementById('pipeline-count');
+    if (pc) pc.textContent = active.length + (active.length === 1 ? ' deal' : ' deals');
+  }
+
+  // Called by the auth layer after login with rows from the database
+  window.atelierHydrate = function(dbDeals, dbTasks) {
+    DEALS = (dbDeals || []).map(function(r) {
+      return { id: r.id, name: r.name, status: r.status, dealType: r.deal_type,
+               client: r.client, submarket: r.submarket, lead: r.lead,
+               amount: r.amount, fee: r.fee, gateData: r.gate_data || {} };
+    });
+    TASKS = (dbTasks || []).map(function(r) {
+      return { id: r.id, type: r.type, title: r.title,
+               contactId: r.contact_id, dealId: r.deal_id,
+               followUpBy: r.follow_up_by, createdOn: (r.created_at || '').slice(0, 10),
+               done: r.done, completedOn: r.completed_on, completionNote: r.completion_note };
+    });
+    // rebuild gate cache from DB
+    Object.keys(gateData).forEach(function(k) { delete gateData[k]; });
+    DEALS.forEach(function(d) { if (d.gateData && Object.keys(d.gateData).length) gateData[d.id] = d.gateData; });
+    var ql = document.getElementById('queue-loading');
+    if (ql) ql.style.display = 'none';
+    renderDealRows();
+    renderActionCenter();
+  };
+
+  function persistDeal(dealId, fields) {
+    if (window._db && window._db.updateDeal) window._db.updateDeal(dealId, fields);
+  }
+
+  window.openDealModal = function() {
+    var opts = STATUS_OPTIONS.filter(function(o) { return o[0] !== 'closed' && o[0] !== 'lost'; })
+      .map(function(o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join('');
+    var html =
+      '<div class="modal-header"><div class="modal-eyebrow">New deal</div>' +
+      '<div class="modal-title">Add a deal to the pipeline</div></div>' +
+      '<div class="modal-body">' +
+        '<div class="field"><label class="field-label required">Deal name</label>' +
+          '<input class="field-input" id="nd-name" placeholder="e.g. Davie 6-acre MF site" /></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label required">Status</label>' +
+            '<select class="field-select" id="nd-status">' + opts + '</select></div>' +
+          '<div class="field"><label class="field-label">Type</label>' +
+            '<select class="field-select" id="nd-type"><option>Land</option><option>Multifamily</option><option>Other</option></select></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">Client / Owner</label><input class="field-input" id="nd-client" /></div>' +
+          '<div class="field"><label class="field-label">Submarket</label><input class="field-input" id="nd-submarket" placeholder="e.g. Davie, Broward" /></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">Deal value ($)</label><input class="field-input" id="nd-amount" type="number" placeholder="22000000" /></div>' +
+          '<div class="field"><label class="field-label">Expected fee ($)</label><input class="field-input" id="nd-fee" type="number" placeholder="220000" /></div>' +
+        '</div>' +
+        '<div class="field"><label class="field-label">Lead</label><input class="field-input" id="nd-lead" value="DF" /></div>' +
+      '</div>' +
+      '<div class="modal-footer">' +
+        '<div class="modal-footer-left">Saves straight to your database.</div>' +
+        '<div class="modal-footer-right">' +
+          '<button class="btn" onclick="closeModal()">Cancel</button>' +
+          '<button class="btn primary" onclick="saveNewDeal()">Add deal</button>' +
+        '</div></div>';
+    document.getElementById('modal').innerHTML = html;
+    document.getElementById('modal-backdrop').classList.add('show');
+    window._modalCancel = null;
+    setTimeout(function() { var f = document.getElementById('nd-name'); if (f) f.focus(); }, 100);
+  };
+
+  window.saveNewDeal = function() {
+    var name = document.getElementById('nd-name').value.trim();
+    if (!name) { alert('Deal name is required.'); return; }
+    var payload = {
+      name: name,
+      status: document.getElementById('nd-status').value,
+      deal_type: document.getElementById('nd-type').value,
+      client: document.getElementById('nd-client').value.trim() || null,
+      submarket: document.getElementById('nd-submarket').value.trim() || null,
+      lead: document.getElementById('nd-lead').value.trim() || 'DF',
+      amount: Number(document.getElementById('nd-amount').value) || 0,
+      fee: Number(document.getElementById('nd-fee').value) || 0
+    };
+    if (!window._db || !window._db.insertDeal) { alert('Not connected to the database.'); return; }
+    window._db.insertDeal(payload).then(function(row) {
+      if (!row) { alert('Save failed — check your connection and try again.'); return; }
+      DEALS.push({ id: row.id, name: row.name, status: row.status, dealType: row.deal_type,
+                   client: row.client, submarket: row.submarket, lead: row.lead,
+                   amount: row.amount, fee: row.fee, gateData: {} });
+      document.getElementById('modal-backdrop').classList.remove('show');
+      renderDealRows();
+      showToast('Deal added', name + ' is in your pipeline — and in the database.');
+    });
+  };
+
+  function _uuidOrNull(v) {
+    return (typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) ? v : null;
   }
 
   function renderActionCenter() {
@@ -5174,6 +5167,9 @@
     if (!t) return;
     t.done = false;
     delete t.completedOn;
+    if (window._db && window._db.updateTask) {
+      window._db.updateTask(t.id, { done: false, completed_on: null });
+    }
     renderActionCenter();
     showToast('Task reopened', t.title);
   };
@@ -5225,6 +5221,9 @@
     t.done = true;
     t.completedOn = today;
     if (note) t.completionNote = note;
+    if (window._db && window._db.updateTask) {
+      window._db.updateTask(t.id, { done: true, completed_on: today, completion_note: note || null });
+    }
 
     // Log to contact timeline so the history survives on the relationship record
     if (t.contactId) {
@@ -5239,7 +5238,7 @@
 
     // Two steps ahead: spawn the next task, inheriting links
     if (nextTitle) {
-      TASKS.push({
+      var nextTask = {
         id: 't' + Date.now().toString(36),
         type: t.type,
         title: nextTitle,
@@ -5248,7 +5247,11 @@
         followUpBy: nextDate || null,
         createdOn: today,
         done: false
-      });
+      };
+      TASKS.push(nextTask);
+      if (window._db && window._db.insertTask) {
+        window._db.insertTask(nextTask).then(function(row) { if (row) nextTask.id = row.id; renderActionCenter(); });
+      }
     }
 
     document.getElementById('modal-backdrop').classList.remove('show');
@@ -5329,6 +5332,13 @@
     t.contactId = document.getElementById('et-contact').value || null;
     t.dealId = document.getElementById('et-deal').value || null;
     t.followUpBy = document.getElementById('et-followup').value || null;
+    if (window._db && window._db.updateTask) {
+      window._db.updateTask(t.id, {
+        title: t.title, type: t.type,
+        contact_id: _uuidOrNull(t.contactId), deal_id: _uuidOrNull(t.dealId),
+        follow_up_by: t.followUpBy
+      });
+    }
     document.getElementById('modal-backdrop').classList.remove('show');
     renderActionCenter();
     showToast('Task updated', title);
@@ -5338,6 +5348,7 @@
     var idx = TASKS.findIndex(function(x) { return x.id === taskId; });
     if (idx < 0) return;
     TASKS.splice(idx, 1);
+    if (window._db && window._db.deleteTask) window._db.deleteTask(taskId);
     renderActionCenter();
   };
 
@@ -5406,6 +5417,9 @@
       done: false
     };
     TASKS.push(task);
+    if (window._db && window._db.insertTask) {
+      window._db.insertTask(task).then(function(row) { if (row) task.id = row.id; renderActionCenter(); });
+    }
     document.getElementById('modal-backdrop').classList.remove('show');
     renderActionCenter();
     showToast('Task added', title);
@@ -5488,11 +5502,55 @@ async function updateDbBadge() {
   }
 }
 
+window._db = {
+  insertDeal: async function(payload) {
+    var res = await sb.from('deals').insert(payload).select().single();
+    if (res.error) { console.error('insertDeal', res.error); return null; }
+    return res.data;
+  },
+  updateDeal: async function(id, fields) {
+    var res = await sb.from('deals').update(fields).eq('id', id);
+    if (res.error) console.error('updateDeal', res.error);
+  },
+  insertTask: async function(t) {
+    var isUuid = function(v) { return typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v); };
+    var payload = {
+      type: t.type, title: t.title,
+      contact_id: isUuid(t.contactId) ? t.contactId : null,
+      deal_id: isUuid(t.dealId) ? t.dealId : null,
+      follow_up_by: t.followUpBy || null,
+      done: !!t.done
+    };
+    var res = await sb.from('tasks').insert(payload).select().single();
+    if (res.error) { console.error('insertTask', res.error); return null; }
+    return res.data;
+  },
+  updateTask: async function(id, fields) {
+    var res = await sb.from('tasks').update(fields).eq('id', id);
+    if (res.error) console.error('updateTask', res.error);
+  },
+  deleteTask: async function(id) {
+    var res = await sb.from('tasks').delete().eq('id', id);
+    if (res.error) console.error('deleteTask', res.error);
+  }
+};
+
+async function hydrateFromDb() {
+  var dealsRes = await sb.from('deals').select('*').order('created_at');
+  var tasksRes = await sb.from('tasks').select('*').order('created_at');
+  if (dealsRes.error || tasksRes.error) {
+    console.error('hydrate failed', dealsRes.error, tasksRes.error);
+    return;
+  }
+  if (window.atelierHydrate) window.atelierHydrate(dealsRes.data, tasksRes.data);
+}
+
 sb.auth.onAuthStateChange(function(event, session) {
   var overlay = document.getElementById('auth-overlay');
   if (session) {
     if (overlay) overlay.classList.add('hidden');
     updateDbBadge();
+    hydrateFromDb();
   } else {
     if (overlay) overlay.classList.remove('hidden');
   }
@@ -5504,6 +5562,7 @@ sb.auth.getSession().then(function(res) {
   if (res.data.session) {
     if (overlay) overlay.classList.add('hidden');
     updateDbBadge();
+    hydrateFromDb();
   }
 });
 </script>
