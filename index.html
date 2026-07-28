@@ -2659,6 +2659,9 @@
   }
   .signout-btn:hover { color: var(--rose); border-color: var(--rose); }
 
+  .row-deal-name { cursor: pointer; }
+  .row-deal-name:hover { color: var(--sunrise); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+
   .toast {
     position: fixed;
     bottom: 30px;
@@ -2781,7 +2784,7 @@
       <div class="quick-stats">
         <div class="stat"><div class="stat-num sunrise" id="qs-owed">3</div><div class="stat-label">Owed responses</div></div>
         <div class="stat"><div class="stat-num gold" id="qs-followups">4</div><div class="stat-label">Deal follow-ups</div></div>
-        <div class="stat"><div class="stat-num moss">$92M</div><div class="stat-label">Pipeline wtd</div></div>
+        <div class="stat"><div class="stat-num moss" id="qs-pipeline">—</div><div class="stat-label">Pipeline value</div></div>
       </div>
     </section>
 
@@ -4933,7 +4936,7 @@
     var typeLabel = d.dealType || 'Other';
     return '<div class="pipeline-row" data-id="' + d.id + '" data-amount="' + (d.amount || 0) + '" data-fee="' + (d.fee || 0) + '">' +
       '<select class="row-status-select" data-status="' + d.status + '" onchange="changeStatus(\'' + d.id + '\', this.value, this)">' + opts + '</select>' +
-      '<div class="row-deal-name">' + escapeHtml(d.name) + '</div>' +
+      '<div class="row-deal-name" onclick="openEditDealModal(\'' + d.id + '\')" title="Click to edit or delete">' + escapeHtml(d.name) + '</div>' +
       '<div><span class="deal-type-tag ' + typeCls + '">' + escapeHtml(typeLabel) + '</span></div>' +
       '<div class="row-text">' + escapeHtml(d.client || '—') + '</div>' +
       '<div class="row-text">' + escapeHtml(d.submarket || '—') + '</div>' +
@@ -4975,6 +4978,8 @@
     if (nums[2]) nums[2].textContent = fmtMoney(fees);
     var pc = document.getElementById('pipeline-count');
     if (pc) pc.textContent = active.length + (active.length === 1 ? ' deal' : ' deals');
+    var qsp = document.getElementById('qs-pipeline');
+    if (qsp) qsp.textContent = fmtMoney(total);
   }
 
   // Called by the auth layer after login with rows from the database
@@ -5065,6 +5070,94 @@
     });
   };
 
+  window.openEditDealModal = function(dealId) {
+    var d = DEALS.find(function(x) { return x.id === dealId; });
+    if (!d) return;
+    var opts = STATUS_OPTIONS.map(function(o) {
+      return '<option value="' + o[0] + '"' + (o[0] === d.status ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('');
+    var typeOpts = ['Land', 'Multifamily', 'Other'].map(function(t) {
+      return '<option' + (t === (d.dealType || 'Land') ? ' selected' : '') + '>' + t + '</option>';
+    }).join('');
+    var html =
+      '<div class="modal-header"><div class="modal-eyebrow">Edit deal</div>' +
+      '<div class="modal-title" style="font-size:20px;">' + escapeHtml(d.name) + '</div></div>' +
+      '<div class="modal-body">' +
+        '<div class="field"><label class="field-label required">Deal name</label>' +
+          '<input class="field-input" id="ed-name" value="' + escapeHtml(d.name) + '" /></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">Status</label>' +
+            '<select class="field-select" id="ed-status">' + opts + '</select></div>' +
+          '<div class="field"><label class="field-label">Type</label>' +
+            '<select class="field-select" id="ed-type">' + typeOpts + '</select></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">Client / Owner</label>' +
+            '<input class="field-input" id="ed-client" value="' + escapeHtml(d.client || '') + '" /></div>' +
+          '<div class="field"><label class="field-label">Submarket</label>' +
+            '<input class="field-input" id="ed-submarket" value="' + escapeHtml(d.submarket || '') + '" /></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">Deal value ($)</label>' +
+            '<input class="field-input" id="ed-amount" type="number" value="' + (d.amount || '') + '" /></div>' +
+          '<div class="field"><label class="field-label">Expected fee ($)</label>' +
+            '<input class="field-input" id="ed-fee" type="number" value="' + (d.fee || '') + '" /></div>' +
+        '</div>' +
+        '<div class="field"><label class="field-label">Lead</label>' +
+          '<input class="field-input" id="ed-lead" value="' + escapeHtml(d.lead || 'DF') + '" /></div>' +
+      '</div>' +
+      '<div class="modal-footer">' +
+        '<div class="modal-footer-left"><button class="btn" style="color:var(--rose);border-color:var(--rose);" onclick="confirmDeleteDeal(\'' + dealId + '\')">Delete deal</button></div>' +
+        '<div class="modal-footer-right">' +
+          '<button class="btn" onclick="closeModal()">Cancel</button>' +
+          '<button class="btn primary" onclick="saveEditDeal(\'' + dealId + '\')">Save changes</button>' +
+        '</div></div>';
+    document.getElementById('modal').innerHTML = html;
+    document.getElementById('modal-backdrop').classList.add('show');
+    window._modalCancel = null;
+  };
+
+  window.saveEditDeal = function(dealId) {
+    var d = DEALS.find(function(x) { return x.id === dealId; });
+    if (!d) return;
+    var name = document.getElementById('ed-name').value.trim();
+    if (!name) { alert('Deal name is required.'); return; }
+    d.name = name;
+    d.status = document.getElementById('ed-status').value;
+    d.dealType = document.getElementById('ed-type').value;
+    d.client = document.getElementById('ed-client').value.trim() || null;
+    d.submarket = document.getElementById('ed-submarket').value.trim() || null;
+    d.amount = Number(document.getElementById('ed-amount').value) || 0;
+    d.fee = Number(document.getElementById('ed-fee').value) || 0;
+    d.lead = document.getElementById('ed-lead').value.trim() || 'DF';
+    persistDeal(dealId, {
+      name: d.name, status: d.status, deal_type: d.dealType,
+      client: d.client, submarket: d.submarket,
+      amount: d.amount, fee: d.fee, lead: d.lead
+    });
+    document.getElementById('modal-backdrop').classList.remove('show');
+    renderDealRows();
+    renderActionCenter();
+    showToast('Deal updated', name);
+  };
+
+  window.confirmDeleteDeal = function(dealId) {
+    var d = DEALS.find(function(x) { return x.id === dealId; });
+    if (!d) return;
+    if (!confirm('Delete "' + d.name + '" permanently?\n\nThis removes the deal from your database. Any tasks linked to it stay, but lose their deal link. This cannot be undone.')) return;
+    // Unlink tasks in memory
+    TASKS.forEach(function(t) { if (t.dealId === dealId) t.dealId = null; });
+    // Remove from DEALS
+    var idx = DEALS.findIndex(function(x) { return x.id === dealId; });
+    if (idx >= 0) DEALS.splice(idx, 1);
+    // DB: unlink tasks then delete deal
+    if (window._db && window._db.deleteDeal) window._db.deleteDeal(dealId);
+    document.getElementById('modal-backdrop').classList.remove('show');
+    renderDealRows();
+    renderActionCenter();
+    showToast('Deal deleted', d.name + ' removed from your pipeline.');
+  };
+
   function _uuidOrNull(v) {
     return (typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) ? v : null;
   }
@@ -5131,7 +5224,7 @@
       var dealTasks = TASKS.filter(function(t) { return t.dealId === dealId && !t.done; });
       if (dealTasks.length === 0) {
         cell.innerHTML = '<span class="next-dot gray"></span>' +
-          '<span class="next-text none" onclick="event.stopPropagation();openTaskModal(\'deal-followup\')">No next action — set one</span>';
+          '<span class="next-text none" onclick="event.stopPropagation();openTaskModal(\'deal-followup\', \'' + dealId + '\')">No next action — set one</span>';
         return;
       }
       // Most urgent task wins the cell
@@ -5352,7 +5445,7 @@
     renderActionCenter();
   };
 
-  window.openTaskModal = function(defaultType) {
+  window.openTaskModal = function(defaultType, preselectDealId) {
     var contactOptions = '<option value="">— none —</option>' +
       CONTACTS.slice().sort(function(a, b) { return a.name.localeCompare(b.name); })
         .map(function(c) {
@@ -5360,7 +5453,8 @@
         }).join('');
     var dealOptions = '<option value="">— none —</option>' +
       Object.keys(DEAL_NAMES).map(function(id) {
-        return '<option value="' + id + '">' + escapeHtml(DEAL_NAMES[id]) + '</option>';
+        var sel = (preselectDealId && id === preselectDealId) ? ' selected' : '';
+        return '<option value="' + id + '"' + sel + '>' + escapeHtml(DEAL_NAMES[id]) + '</option>';
       }).join('');
 
     var html =
@@ -5532,6 +5626,11 @@ window._db = {
   deleteTask: async function(id) {
     var res = await sb.from('tasks').delete().eq('id', id);
     if (res.error) console.error('deleteTask', res.error);
+  },
+  deleteDeal: async function(id) {
+    await sb.from('tasks').update({ deal_id: null }).eq('deal_id', id);
+    var res = await sb.from('deals').delete().eq('id', id);
+    if (res.error) console.error('deleteDeal', res.error);
   }
 };
 
