@@ -2772,7 +2772,7 @@
 
   .lib-row {
     display: grid;
-    grid-template-columns: 110px 1.8fr 80px 1fr 100px 1.6fr;
+    grid-template-columns: 120px 1.8fr 80px 1fr 100px 1.6fr;
     gap: 10px;
     align-items: center;
     background: white;
@@ -2785,6 +2785,15 @@
     transition: border-color .12s ease;
   }
   .lib-row:hover { border-color: var(--ink-soft); }
+  .lib-row .status-pill {
+    font-size: 7.5px;
+    letter-spacing: 0.02em;
+    padding: 4px 5px;
+    display: inline-block;
+    width: 100%;
+    text-align: center;
+    white-space: nowrap;
+  }
   .lib-row .lib-name { font-weight: 600; color: var(--ink); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .lib-context { font-size: 11px; color: var(--ink-mute); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .lib-context.closed { color: var(--moss); }
@@ -3681,7 +3690,7 @@
         targetSection.appendChild(row);
       }
       showToast(dealName + ' → ' + STATUS_LABELS[newStatus],
-                'Changed from ' + STATUS_LABELS[oldStatus] + '. Salesforce + email actions would be queued.');
+                'Changed from ' + STATUS_LABELS[oldStatus] + ' — saved to your database.');
     }
     recalculateSummary();
     renderNextActions();
@@ -5654,7 +5663,7 @@
         context = '<span class="lib-context"></span>';
       }
       return '<div class="lib-row" onclick="openDealPage(\'' + d.id + '\')">' +
-        '<span class="status-pill ' + pillClass + '" style="font-size:8.5px;">' + escapeHtml(statusLabel) + '</span>' +
+        '<span class="status-pill ' + pillClass + '">' + escapeHtml(statusLabel) + '</span>' +
         '<span class="lib-name">' + escapeHtml(d.name) + '</span>' +
         '<span class="lib-hide-sm"><span class="deal-type-tag ' + (TYPE_TAG[d.dealType] || 'dt-other') + '">' + escapeHtml(d.dealType || 'Other') + '</span></span>' +
         '<span class="lib-context lib-hide-sm">' + escapeHtml(d.submarket || '—') + '</span>' +
