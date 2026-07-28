@@ -2659,7 +2659,17 @@
   }
   .signout-btn:hover { color: var(--rose); border-color: var(--rose); }
 
-  .row-deal-name { cursor: pointer; }
+  .row-deal-name { cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .row-edit-icon {
+    opacity: 0;
+    font-size: 12px;
+    color: var(--ink-mute);
+    padding: 2px 5px;
+    border-radius: 5px;
+    transition: opacity .12s ease;
+  }
+  .pipeline-row:hover .row-edit-icon { opacity: 1; }
+  .row-edit-icon:hover { color: var(--sunrise); background: var(--sunrise-soft); }
   .row-deal-name:hover { color: var(--sunrise); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
 
   /* ── Deal task drawer (Option C) ── */
@@ -2758,6 +2768,31 @@
     font-size: 11px;
   }
   .completed-strip-caret { margin-left: auto; }
+
+  .lib-row {
+    display: grid;
+    grid-template-columns: 110px 1.8fr 80px 1fr 100px 1.6fr;
+    gap: 10px;
+    align-items: center;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: 11px 14px;
+    margin-bottom: 7px;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: border-color .12s ease;
+  }
+  .lib-row:hover { border-color: var(--ink-soft); }
+  .lib-row .lib-name { font-weight: 600; color: var(--ink); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .lib-context { font-size: 11px; color: var(--ink-mute); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .lib-context.closed { color: var(--moss); }
+  .lib-context.lost { color: var(--rose); }
+  .lib-num { font-family: var(--font-serif); text-align: right; }
+  @media (max-width: 900px) {
+    .lib-row { grid-template-columns: 90px 1.5fr 80px 1.2fr; }
+    .lib-row .lib-hide-sm { display: none; }
+  }
 
   .toast {
     position: fixed;
@@ -2860,8 +2895,7 @@
   <div class="subnav">
     <a class="subnav-item active" data-work-tab="today" onclick="setWorkTab('today', this)">Today</a>
     <a class="subnav-item" data-work-tab="pipeline" onclick="setWorkTab('pipeline', this)">Pipeline</a>
-    <a class="subnav-item coming-soon">Vault</a>
-    <a class="subnav-item coming-soon">Archive</a>
+    <a class="subnav-item" data-work-tab="library" onclick="setWorkTab('library', this)">Library</a>
     <a class="subnav-item coming-soon">Capital</a>
     <a class="subnav-item coming-soon">Comps</a>
     <a class="subnav-item" data-work-tab="contacts" onclick="setWorkTab('contacts', this)">Contacts</a>
@@ -3186,9 +3220,30 @@
     </section>
 
 
-      <div id="deal-page" style="display:none;"></div>
-
     </div><!-- /#work-tab-pipeline -->
+
+    <div class="work-tab" id="work-tab-library" style="display:none;">
+      <section class="section">
+        <div class="section-head">
+          <div class="section-title">Deal library <span class="section-count" id="library-count">0 deals</span></div>
+          <a class="section-action" onclick="openDealModal(true)" style="cursor:pointer;">+ Add to library</a>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+          <input class="field-input" id="library-search" placeholder="Search name, client, submarket…" style="max-width:300px;font-size:13px;padding:8px 12px;" oninput="renderLibrary()" />
+          <div style="display:flex;gap:4px;">
+            <button class="filter-chip active" data-lib="all" onclick="setLibraryFilter('all', this)">All</button>
+            <button class="filter-chip" data-lib="active" onclick="setLibraryFilter('active', this)">Active</button>
+            <button class="filter-chip" data-lib="closed" onclick="setLibraryFilter('closed', this)">Closed</button>
+            <button class="filter-chip" data-lib="lost" onclick="setLibraryFilter('lost', this)">Lost</button>
+          </div>
+        </div>
+        <div id="library-list"></div>
+      </section>
+    </div><!-- /#work-tab-library -->
+
+    <div class="work-tab" id="work-tab-dealpage" style="display:none;">
+      <div id="deal-page"></div>
+    </div>
 
     <div class="work-tab" id="work-tab-contacts" style="display:none;">
 
@@ -3614,7 +3669,7 @@
     if (newStatus === 'closed' || newStatus === 'lost') {
       var row = document.querySelector('.pipeline-row[data-id="' + dealId + '"]');
       if (row) row.style.display = 'none';
-      var dest = newStatus === 'closed' ? 'Archive' : 'Vault';
+      var dest = 'the Library';
       showToast(dealName + ' → ' + STATUS_LABELS[newStatus],
                 'Moved to ' + dest + '. (Hidden from active pipeline.)');
     } else {
@@ -3831,7 +3886,7 @@
 
   function openGateLost(dealId, dealName, newStatus, oldStatus, selectEl) {
     var reasonOpts = LOST_REASONS.map(function(r) { return '<option value="' + r + '">' + r + '</option>'; }).join('');
-    var html = gateHeader('Gate · Lost or abandoned', dealName, 'Sent to Vault. Resurfaces when capital criteria match or for owner re-engagement.') +
+    var html = gateHeader('Gate · Lost or abandoned', dealName, 'Moves to the Library under Lost — with its full deal room intact for when the seller circles back.') +
       '<div class="modal-body">' +
       '<div class="field-row" style="grid-template-columns:1fr 1.4fr;">' +
       '<div class="field"><label class="field-label required">Reason</label>' +
@@ -3839,7 +3894,7 @@
       '<div class="field"><label class="field-label">Notes <span class="hint">(context, when to re-engage)</span></label>' +
       '<textarea class="field-textarea" id="g-n" placeholder="What happened, who\'s involved, when to re-engage…"></textarea></div>' +
       '</div></div>' +
-      gateFooter('Move to Vault', "saveLost('" + dealId + "','" + escapeJs(dealName) + "','" + oldStatus + "')", true);
+      gateFooter('Mark as Lost', "saveLost('" + dealId + "','" + escapeJs(dealName) + "','" + oldStatus + "')", true);
     openModal(html, function() { revertSelect(selectEl, oldStatus); });
   }
 
@@ -4267,7 +4322,9 @@
   var contactsFilter = 'all';
   var selectedContactId = null;
 
+  var currentWorkTab = 'today';
   window.setWorkTab = function(tab, el) {
+    currentWorkTab = tab;
     document.querySelectorAll('#view-work .subnav-item[data-work-tab]').forEach(function(x) { x.classList.remove('active'); });
     if (el) el.classList.add('active');
     document.querySelectorAll('#view-work .work-tab').forEach(function(x) { x.style.display = 'none'; });
@@ -4275,6 +4332,7 @@
     if (target) target.style.display = 'block';
     if (tab === 'contacts') renderContactsList();
     if (tab === 'pipeline') { recalculateSummary(); renderNextActions(); }
+    if (tab === 'library') renderLibrary();
     window.scrollTo(0, 0);
   };
 
@@ -5045,7 +5103,7 @@
     var typeLabel = d.dealType || 'Other';
     return '<div class="pipeline-row" data-id="' + d.id + '" data-amount="' + (d.amount || 0) + '" data-fee="' + (d.fee || 0) + '">' +
       '<select class="row-status-select" data-status="' + d.status + '" onchange="changeStatus(\'' + d.id + '\', this.value, this)">' + opts + '</select>' +
-      '<div class="row-deal-name" onclick="openDealPage(\'' + d.id + '\')" title="Open deal page">' + escapeHtml(d.name) + '</div>' +
+      '<div class="row-deal-name" onclick="openDealPage(\'' + d.id + '\')" title="Open deal page">' + escapeHtml(d.name) + '<span class="row-edit-icon" title="Quick edit" onclick="event.stopPropagation();openEditDealModal(\'' + d.id + '\')">✎</span></div>' +
       '<div><span class="deal-type-tag ' + typeCls + '">' + escapeHtml(typeLabel) + '</span></div>' +
       '<div class="row-text">' + escapeHtml(d.client || '—') + '</div>' +
       '<div class="row-text">' + escapeHtml(d.submarket || '—') + '</div>' +
@@ -5073,6 +5131,7 @@
     recalculateSummary();
     renderNextActions();
     updateSummaryBar();
+    renderLibrary();
     if (currentDealPageId) {
       var stillExists = DEALS.some(function(x) { return x.id === currentDealPageId; });
       if (stillExists) renderDealPage(currentDealPageId);
@@ -5138,8 +5197,8 @@
     if (window._db && window._db.updateDeal) window._db.updateDeal(dealId, fields);
   }
 
-  window.openDealModal = function() {
-    var opts = STATUS_OPTIONS.filter(function(o) { return o[0] !== 'closed' && o[0] !== 'lost'; })
+  window.openDealModal = function(includeArchival) {
+    var opts = STATUS_OPTIONS.filter(function(o) { return includeArchival || (o[0] !== 'closed' && o[0] !== 'lost'); })
       .map(function(o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join('');
     var html =
       '<div class="modal-header"><div class="modal-eyebrow">New deal</div>' +
@@ -5200,6 +5259,41 @@
     });
   };
 
+  function editAssetFieldsHtml(type, details) {
+    var size = escapeHtml(details.size || '');
+    var year = escapeHtml(details.yearBuilt || '');
+    if (type === 'Multifamily') {
+      return '<div class="field-row">' +
+        '<div class="field"><label class="field-label">Unit count</label>' +
+          '<input class="field-input" id="ed-size" value="' + size + '" placeholder="e.g. 220" /></div>' +
+        '<div class="field"><label class="field-label">Year built</label>' +
+          '<input class="field-input" id="ed-year" value="' + year + '" placeholder="e.g. 1987" /></div>' +
+      '</div>';
+    }
+    if (type === 'Land') {
+      return '<div class="field"><label class="field-label">Land area (acres)</label>' +
+        '<input class="field-input" id="ed-size" value="' + size + '" placeholder="e.g. 6.2" /></div>';
+    }
+    return '<div class="field-row">' +
+      '<div class="field"><label class="field-label">Building SF</label>' +
+        '<input class="field-input" id="ed-size" value="' + size + '" placeholder="e.g. 45,000" /></div>' +
+      '<div class="field"><label class="field-label">Year built</label>' +
+        '<input class="field-input" id="ed-year" value="' + year + '" placeholder="e.g. 1998" /></div>' +
+    '</div>';
+  }
+
+  window.refreshEditAssetFields = function() {
+    var container = document.getElementById('ed-asset-fields');
+    var typeEl = document.getElementById('ed-type');
+    if (!container || !typeEl) return;
+    var sizeEl = document.getElementById('ed-size');
+    var yearEl = document.getElementById('ed-year');
+    container.innerHTML = editAssetFieldsHtml(typeEl.value, {
+      size: sizeEl ? sizeEl.value : '',
+      yearBuilt: yearEl ? yearEl.value : ''
+    });
+  };
+
   window.openEditDealModal = function(dealId) {
     var d = DEALS.find(function(x) { return x.id === dealId; });
     if (!d) return;
@@ -5219,13 +5313,13 @@
           '<div class="field"><label class="field-label">Status</label>' +
             '<select class="field-select" id="ed-status">' + opts + '</select></div>' +
           '<div class="field"><label class="field-label">Type</label>' +
-            '<select class="field-select" id="ed-type">' + typeOpts + '</select></div>' +
+            '<select class="field-select" id="ed-type" onchange="refreshEditAssetFields()">' + typeOpts + '</select></div>' +
         '</div>' +
         '<div class="field-row">' +
-          '<div class="field"><label class="field-label">Client / Owner</label>' +
-            '<input class="field-input" id="ed-client" value="' + escapeHtml(d.client || '') + '" /></div>' +
           '<div class="field"><label class="field-label">Submarket</label>' +
             '<input class="field-input" id="ed-submarket" value="' + escapeHtml(d.submarket || '') + '" /></div>' +
+          '<div class="field"><label class="field-label">Lead</label>' +
+            '<input class="field-input" id="ed-lead" value="' + escapeHtml(d.lead || 'DF') + '" /></div>' +
         '</div>' +
         '<div class="field-row">' +
           '<div class="field"><label class="field-label">Deal value ($)</label>' +
@@ -5233,20 +5327,18 @@
           '<div class="field"><label class="field-label">Expected fee ($)</label>' +
             '<input class="field-input" id="ed-fee" type="number" value="' + (d.fee || '') + '" /></div>' +
         '</div>' +
-        '<div class="field"><label class="field-label">Lead</label>' +
-          '<input class="field-input" id="ed-lead" value="' + escapeHtml(d.lead || 'DF') + '" /></div>' +
         '<div class="field"><label class="field-label">Address</label>' +
           '<input class="field-input" id="ed-address" value="' + escapeHtml(d.address || '') + '" placeholder="e.g. 4200 NW 36th St, Miami FL" /></div>' +
-        '<div class="field-row">' +
-          '<div class="field"><label class="field-label">' + (d.dealType === 'Multifamily' ? 'Unit count' : d.dealType === 'Land' ? 'Land area (acres)' : 'Building SF') + '</label>' +
-            '<input class="field-input" id="ed-size" value="' + escapeHtml((d.assetDetails && d.assetDetails.size) || '') + '" /></div>' +
-          '<div class="field"><label class="field-label">Seller name</label>' +
-            '<input class="field-input" id="ed-seller-name" value="' + escapeHtml((d.seller && d.seller.name) || '') + '" /></div>' +
-        '</div>' +
-        '<div class="field-row">' +
-          '<div class="field"><label class="field-label">Seller phone</label>' +
-            '<input class="field-input" id="ed-seller-phone" value="' + escapeHtml((d.seller && d.seller.phone) || '') + '" /></div>' +
-          '<div class="field"><label class="field-label">Seller email</label>' +
+        '<div id="ed-asset-fields">' + editAssetFieldsHtml(d.dealType || 'Land', d.assetDetails || {}) + '</div>' +
+        '<div style="border-top:1px solid var(--line-soft);margin:16px 0 12px;padding-top:12px;">' +
+          '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);font-weight:700;margin-bottom:10px;">Client / seller contact</div>' +
+          '<div class="field-row">' +
+            '<div class="field"><label class="field-label">Name</label>' +
+              '<input class="field-input" id="ed-client" value="' + escapeHtml(d.client || '') + '" /></div>' +
+            '<div class="field"><label class="field-label">Phone</label>' +
+              '<input class="field-input" id="ed-seller-phone" value="' + escapeHtml((d.seller && d.seller.phone) || '') + '" /></div>' +
+          '</div>' +
+          '<div class="field"><label class="field-label">Email</label>' +
             '<input class="field-input" id="ed-seller-email" value="' + escapeHtml((d.seller && d.seller.email) || '') + '" /></div>' +
         '</div>' +
       '</div>' +
@@ -5277,8 +5369,10 @@
     d.address = document.getElementById('ed-address').value.trim() || null;
     d.assetDetails = d.assetDetails || {};
     d.assetDetails.size = document.getElementById('ed-size').value.trim() || null;
+    var yearEl = document.getElementById('ed-year');
+    d.assetDetails.yearBuilt = yearEl ? (yearEl.value.trim() || null) : (d.assetDetails.yearBuilt || null);
     d.seller = {
-      name: document.getElementById('ed-seller-name').value.trim() || null,
+      name: (d.seller && d.seller.name) || null,
       phone: document.getElementById('ed-seller-phone').value.trim() || null,
       email: document.getElementById('ed-seller-email').value.trim() || null
     };
@@ -5312,21 +5406,22 @@
   };
 
   /* ══════════ DEAL PAGE ══════════ */
+  var dealPageOrigin = 'pipeline';
   window.openDealPage = function(dealId) {
     currentDealPageId = dealId;
-    var list = document.getElementById('pipeline-list-view');
-    var page = document.getElementById('deal-page');
-    if (list) list.style.display = 'none';
-    if (page) { page.style.display = 'block'; renderDealPage(dealId); }
+    dealPageOrigin = (currentWorkTab === 'library') ? 'library' : 'pipeline';
+    document.querySelectorAll('#view-work .work-tab').forEach(function(x) { x.style.display = 'none'; });
+    var tab = document.getElementById('work-tab-dealpage');
+    if (tab) tab.style.display = 'block';
+    renderDealPage(dealId);
     window.scrollTo(0, 0);
   };
 
   window.closeDealPage = function() {
     currentDealPageId = null;
-    var list = document.getElementById('pipeline-list-view');
-    var page = document.getElementById('deal-page');
-    if (page) page.style.display = 'none';
-    if (list) list.style.display = 'block';
+    var origin = dealPageOrigin;
+    var el = document.querySelector('[data-work-tab=' + origin + ']');
+    setWorkTab(origin, el);
     renderDealRows();
   };
 
@@ -5345,15 +5440,16 @@
     if (!sizeVal && importedUnits) sizeVal = importedUnits + ' (from import)';
 
     var seller = d.seller || {};
+    var sellerName = seller.name || d.client || '';
     var sellerBlock =
-      '<div class="profile-section"><div class="profile-section-title">Seller / ownership contact</div>' +
-      (seller.name || seller.phone || seller.email
+      '<div class="profile-section"><div class="profile-section-title">Client / seller contact</div>' +
+      (sellerName || seller.phone || seller.email
         ? '<div class="profile-info-grid">' +
-            (seller.name ? '<div class="profile-info-item"><div class="profile-info-label">Name</div><div class="profile-info-value">' + escapeHtml(seller.name) + '</div></div>' : '') +
+            (sellerName ? '<div class="profile-info-item"><div class="profile-info-label">Name</div><div class="profile-info-value">' + escapeHtml(sellerName) + '</div></div>' : '') +
             (seller.phone ? '<div class="profile-info-item"><div class="profile-info-label">Phone</div><div class="profile-info-value"><a href="tel:' + seller.phone.replace(/\D/g, '') + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(seller.phone) + '</a></div></div>' : '') +
             (seller.email ? '<div class="profile-info-item"><div class="profile-info-label">Email</div><div class="profile-info-value"><a href="mailto:' + seller.email + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(seller.email) + '</a></div></div>' : '') +
           '</div>'
-        : '<div class="profile-info-value muted">No seller contact on file — use Edit to add name, phone, and email.</div>') +
+        : '<div class="profile-info-value muted">No contact on file — use Edit to add phone and email.</div>') +
       '</div>';
 
     // Open + completed tasks
@@ -5429,7 +5525,7 @@
     var today = new Date().toISOString().slice(0, 10);
 
     page.innerHTML =
-      '<div class="profile-back" onclick="closeDealPage()" style="border-radius:var(--r-md) var(--r-md) 0 0;border:1px solid var(--line);border-bottom:none;">← Back to pipeline</div>' +
+      '<div class="profile-back" onclick="closeDealPage()" style="border-radius:var(--r-md) var(--r-md) 0 0;border:1px solid var(--line);border-bottom:none;">← Back to ' + (dealPageOrigin === 'library' ? 'library' : 'pipeline') + '</div>' +
       '<div class="profile-card" style="border-radius:0 0 var(--r-md) var(--r-md);">' +
         '<div class="profile-header">' +
           '<div class="profile-header-body">' +
@@ -5448,8 +5544,9 @@
             '<select class="row-status-select" data-status="' + d.status + '" style="width:auto;" onchange="changeStatusFromPage(\'' + dealId + '\', this.value, this)">' + statusOpts + '</select></div></div>' +
           '<div class="company-overview-item"><div class="company-overview-label">Deal value</div><div class="company-overview-value">' + fmtMoney(d.amount || 0) + '</div></div>' +
           '<div class="company-overview-item"><div class="company-overview-label">Fee</div><div class="company-overview-value">' + fmtMoney(d.fee || 0) + '</div></div>' +
-          '<div class="company-overview-item"><div class="company-overview-label">Client / Owner</div><div class="company-overview-value">' + escapeHtml(d.client || '—') + '</div></div>' +
+
           '<div class="company-overview-item"><div class="company-overview-label">' + sizeLabel + '</div><div class="company-overview-value">' + escapeHtml(sizeVal || '—') + '</div></div>' +
+          ((d.assetDetails && d.assetDetails.yearBuilt) ? '<div class="company-overview-item"><div class="company-overview-label">Year built</div><div class="company-overview-value">' + escapeHtml(d.assetDetails.yearBuilt) + '</div></div>' : '') +
           '<div class="company-overview-item"><div class="company-overview-label">Lead</div><div class="company-overview-value">' + escapeHtml(d.lead || 'DF') + '</div></div>' +
         '</div>' +
         sellerBlock +
@@ -5496,6 +5593,76 @@
       '</div>';
   }
 
+  var libraryFilter = 'all';
+  window.setLibraryFilter = function(f, el) {
+    libraryFilter = f;
+    document.querySelectorAll('[data-lib]').forEach(function(c) { c.classList.remove('active'); });
+    if (el) el.classList.add('active');
+    renderLibrary();
+  };
+
+  window.renderLibrary = function() {
+    var list = document.getElementById('library-list');
+    if (!list) return;
+    var q = (document.getElementById('library-search') ? document.getElementById('library-search').value : '').toLowerCase().trim();
+    var filtered = DEALS.filter(function(d) {
+      if (libraryFilter === 'active' && (d.status === 'closed' || d.status === 'lost')) return false;
+      if (libraryFilter === 'closed' && d.status !== 'closed') return false;
+      if (libraryFilter === 'lost' && d.status !== 'lost') return false;
+      if (q) {
+        var hay = (d.name + ' ' + (d.client || '') + ' ' + (d.submarket || '') + ' ' + (d.address || '')).toLowerCase();
+        if (hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+    // Sort: active first (by status order), then closed, then lost; alpha within
+    var order = {};
+    STATUS_OPTIONS.forEach(function(o, i) { order[o[0]] = i; });
+    filtered.sort(function(a, b) {
+      var oa = order[a.status] || 0, ob = order[b.status] || 0;
+      if (oa !== ob) return oa - ob;
+      return a.name.localeCompare(b.name);
+    });
+
+    var cnt = document.getElementById('library-count');
+    if (cnt) cnt.textContent = filtered.length + (filtered.length === 1 ? ' deal' : ' deals');
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<div style="background:white;border:1.5px dashed var(--line);border-radius:var(--r-md);padding:30px;text-align:center;color:var(--ink-mute);font-size:12.5px;">No deals match. Every deal you ever log — active, closed, or lost — lives here.</div>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(function(d) {
+      var statusLabel = STATUS_LABELS[d.status] || d.status;
+      var pillClass = 'sp-' + d.status;
+      var context = '';
+      var g = d.gateData || {};
+      if (d.status === 'closed') {
+        var c = g.closed || {};
+        var bits = [];
+        if (c.closeDate || c.date) bits.push(c.closeDate || c.date);
+        if (c.finalPrice || c.price) bits.push(c.finalPrice || c.price);
+        if (c.buyer) bits.push('to ' + c.buyer);
+        context = '<span class="lib-context closed">✓ Closed' + (bits.length ? ' · ' + bits.join(' · ') : '') + '</span>';
+      } else if (d.status === 'lost') {
+        var l = g.lost || {};
+        var reason = l.reason || d.lostReason || '';
+        context = '<span class="lib-context lost">✕ ' + escapeHtml(reason || 'Lost') + (l.notes ? ' — ' + escapeHtml(l.notes) : '') + '</span>';
+      } else {
+        var openCount = TASKS.filter(function(t) { return t.dealId === d.id && !t.done; }).length;
+        context = '<span class="lib-context">' + (openCount ? openCount + ' open to-do' + (openCount === 1 ? '' : 's') : 'No open to-dos') + '</span>';
+      }
+      return '<div class="lib-row" onclick="openDealPage(\'' + d.id + '\')">' +
+        '<span class="status-pill ' + pillClass + '" style="font-size:8.5px;">' + escapeHtml(statusLabel) + '</span>' +
+        '<span class="lib-name">' + escapeHtml(d.name) + '</span>' +
+        '<span class="lib-hide-sm"><span class="deal-type-tag ' + (TYPE_TAG[d.dealType] || 'dt-other') + '">' + escapeHtml(d.dealType || 'Other') + '</span></span>' +
+        '<span class="lib-context lib-hide-sm">' + escapeHtml(d.submarket || '—') + '</span>' +
+        '<span class="lib-num lib-hide-sm">' + (d.amount ? fmtMoney(d.amount) : '—') + '</span>' +
+        context +
+      '</div>';
+    }).join('');
+  };
+
   window.changeStatusFromPage = function(dealId, newStatus, pageSelectEl) {
     var rowSelect = document.querySelector('.pipeline-row[data-id="' + dealId + '"] .row-status-select');
     if (rowSelect) {
@@ -5505,7 +5672,7 @@
     } else {
       // row not rendered (shouldn't happen) — persist directly
       var d = DEALS.find(function(x) { return x.id === dealId; });
-      if (d) { d.status = newStatus; persistDeal(dealId, { status: newStatus }); }
+      if (d) { d.status = newStatus; persistDeal(dealId, { status: newStatus }); renderDealRows(); renderLibrary(); renderDealPage(dealId); }
     }
   };
 
