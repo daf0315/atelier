@@ -2738,6 +2738,27 @@
   .next-summary { cursor: pointer; }
   .next-summary:hover { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
 
+  .completed-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    background: var(--moss-soft);
+    color: var(--moss);
+    border-radius: var(--r-sm);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .completed-strip:hover { filter: brightness(0.97); }
+  .completed-strip-count {
+    background: white;
+    padding: 1px 8px;
+    border-radius: var(--r-pill);
+    font-size: 11px;
+  }
+  .completed-strip-caret { margin-left: auto; }
+
   .toast {
     position: fixed;
     bottom: 30px;
@@ -2874,7 +2895,6 @@
         <div class="psb-stat"><span class="psb-num">11</span><span class="psb-label">Active deals</span></div>
         <div class="psb-stat"><span class="psb-num moss">$284M</span><span class="psb-label">Total value</span></div>
         <div class="psb-stat"><span class="psb-num gold">$2.3M</span><span class="psb-label">Projected fees</span></div>
-        <div class="psb-stat"><span class="psb-num rose" id="psb-needs-action">0</span><span class="psb-label">Need action</span></div>
         <a class="psb-cta" onclick="setWorkTab('pipeline', document.querySelector('[data-work-tab=pipeline]'))">Open pipeline →</a>
       </div>
 
@@ -2895,8 +2915,17 @@
       </div>
 
       <div class="queue-group" id="queue-someday-group" style="display:none;">
-        <div class="queue-group-title">No date &amp; completed <span class="queue-group-count" id="queue-someday-count"></span></div>
+        <div class="queue-group-title">No date <span class="queue-group-count" id="queue-someday-count"></span></div>
         <div id="queue-someday"></div>
+      </div>
+
+      <div id="queue-completed-group" style="display:none;margin-bottom:22px;">
+        <div class="completed-strip" onclick="toggleCompletedStrip()">
+          <span>✓ Completed today</span>
+          <span class="completed-strip-count" id="completed-count">0</span>
+          <span class="completed-strip-caret" id="completed-caret">▾</span>
+        </div>
+        <div id="queue-completed" style="display:none;margin-top:8px;"></div>
       </div>
 
       <div id="queue-loading" style="text-align:center;color:var(--ink-mute);font-size:12px;font-style:italic;padding:16px;">Loading your data…</div>
@@ -2994,7 +3023,7 @@
     <div class="work-tab" id="work-tab-pipeline" style="display:none;">
 
     <!-- ━━━━━━━━━━━━━━━━ PIPELINE — PRE-RENDERED, NO JS REQUIRED ━━━━━━━━━━━━━━━━ -->
-    <section class="section">
+    <section class="section" id="pipeline-list-view">
       <div class="section-head">
         <div class="section-title">Active pipeline <span class="section-count" id="pipeline-count">0 deals</span></div>
         <a class="section-action" onclick="openDealModal()" style="cursor:pointer;">+ Add deal</a>
@@ -3156,6 +3185,8 @@
       </div>
     </section>
 
+
+      <div id="deal-page" style="display:none;"></div>
 
     </div><!-- /#work-tab-pipeline -->
 
@@ -4924,6 +4955,9 @@
   // Optional links: dealId (to Pipeline), contactId (to Contacts), followUpBy (date)
   var TASKS = [];   // hydrated from database after login
   var DEALS = [];   // hydrated from database after login
+  var DEAL_NOTES = [];      // deal-level notes (timeline rows with deal_id)
+  var MARKET_ACTIVITY = []; // deal_history rows per deal
+  var currentDealPageId = null;
 
   // Deal name lookup for task rendering (from seed data in Pipeline HTML)
   function DEAL_NAME_MAP() {
@@ -5011,7 +5045,7 @@
     var typeLabel = d.dealType || 'Other';
     return '<div class="pipeline-row" data-id="' + d.id + '" data-amount="' + (d.amount || 0) + '" data-fee="' + (d.fee || 0) + '">' +
       '<select class="row-status-select" data-status="' + d.status + '" onchange="changeStatus(\'' + d.id + '\', this.value, this)">' + opts + '</select>' +
-      '<div class="row-deal-name" onclick="openEditDealModal(\'' + d.id + '\')" title="Click to edit or delete">' + escapeHtml(d.name) + '</div>' +
+      '<div class="row-deal-name" onclick="openDealPage(\'' + d.id + '\')" title="Open deal page">' + escapeHtml(d.name) + '</div>' +
       '<div><span class="deal-type-tag ' + typeCls + '">' + escapeHtml(typeLabel) + '</span></div>' +
       '<div class="row-text">' + escapeHtml(d.client || '—') + '</div>' +
       '<div class="row-text">' + escapeHtml(d.submarket || '—') + '</div>' +
@@ -5039,6 +5073,11 @@
     recalculateSummary();
     renderNextActions();
     updateSummaryBar();
+    if (currentDealPageId) {
+      var stillExists = DEALS.some(function(x) { return x.id === currentDealPageId; });
+      if (stillExists) renderDealPage(currentDealPageId);
+      else closeDealPage();
+    }
   }
 
   function updateSummaryBar() {
@@ -5064,17 +5103,27 @@
   }
 
   // Called by the auth layer after login with rows from the database
-  window.atelierHydrate = function(dbDeals, dbTasks) {
+  window.atelierHydrate = function(dbDeals, dbTasks, dbDealNotes, dbHistory) {
     DEALS = (dbDeals || []).map(function(r) {
       return { id: r.id, name: r.name, status: r.status, dealType: r.deal_type,
                client: r.client, submarket: r.submarket, lead: r.lead,
-               amount: r.amount, fee: r.fee, gateData: r.gate_data || {} };
+               amount: r.amount, fee: r.fee, gateData: r.gate_data || {},
+               address: r.address || null,
+               assetDetails: r.asset_details || {},
+               seller: r.seller || {} };
     });
     TASKS = (dbTasks || []).map(function(r) {
       return { id: r.id, type: r.type, title: r.title,
                contactId: r.contact_id, dealId: r.deal_id,
                followUpBy: r.follow_up_by, createdOn: (r.created_at || '').slice(0, 10),
                done: r.done, completedOn: r.completed_on, completionNote: r.completion_note };
+    });
+    DEAL_NOTES = (dbDealNotes || []).map(function(r) {
+      return { id: r.id, dealId: r.deal_id, type: r.type, date: r.date, body: r.body || r.title };
+    });
+    MARKET_ACTIVITY = (dbHistory || []).map(function(r) {
+      return { id: r.id, dealId: r.deal_id, investor: r.investor_name || '', contactId: r.contact_id,
+               dateShown: r.date_shown, outcome: r.outcome, amount: r.amount || '', comment: r.comment || '' };
     });
     // rebuild gate cache from DB
     Object.keys(gateData).forEach(function(k) { delete gateData[k]; });
@@ -5186,6 +5235,20 @@
         '</div>' +
         '<div class="field"><label class="field-label">Lead</label>' +
           '<input class="field-input" id="ed-lead" value="' + escapeHtml(d.lead || 'DF') + '" /></div>' +
+        '<div class="field"><label class="field-label">Address</label>' +
+          '<input class="field-input" id="ed-address" value="' + escapeHtml(d.address || '') + '" placeholder="e.g. 4200 NW 36th St, Miami FL" /></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">' + (d.dealType === 'Multifamily' ? 'Unit count' : d.dealType === 'Land' ? 'Land area (acres)' : 'Building SF') + '</label>' +
+            '<input class="field-input" id="ed-size" value="' + escapeHtml((d.assetDetails && d.assetDetails.size) || '') + '" /></div>' +
+          '<div class="field"><label class="field-label">Seller name</label>' +
+            '<input class="field-input" id="ed-seller-name" value="' + escapeHtml((d.seller && d.seller.name) || '') + '" /></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">Seller phone</label>' +
+            '<input class="field-input" id="ed-seller-phone" value="' + escapeHtml((d.seller && d.seller.phone) || '') + '" /></div>' +
+          '<div class="field"><label class="field-label">Seller email</label>' +
+            '<input class="field-input" id="ed-seller-email" value="' + escapeHtml((d.seller && d.seller.email) || '') + '" /></div>' +
+        '</div>' +
       '</div>' +
       '<div class="modal-footer">' +
         '<div class="modal-footer-left"><button class="btn" style="color:var(--rose);border-color:var(--rose);" onclick="confirmDeleteDeal(\'' + dealId + '\')">Delete deal</button></div>' +
@@ -5211,10 +5274,19 @@
     d.amount = Number(document.getElementById('ed-amount').value) || 0;
     d.fee = Number(document.getElementById('ed-fee').value) || 0;
     d.lead = document.getElementById('ed-lead').value.trim() || 'DF';
+    d.address = document.getElementById('ed-address').value.trim() || null;
+    d.assetDetails = d.assetDetails || {};
+    d.assetDetails.size = document.getElementById('ed-size').value.trim() || null;
+    d.seller = {
+      name: document.getElementById('ed-seller-name').value.trim() || null,
+      phone: document.getElementById('ed-seller-phone').value.trim() || null,
+      email: document.getElementById('ed-seller-email').value.trim() || null
+    };
     persistDeal(dealId, {
       name: d.name, status: d.status, deal_type: d.dealType,
       client: d.client, submarket: d.submarket,
-      amount: d.amount, fee: d.fee, lead: d.lead
+      amount: d.amount, fee: d.fee, lead: d.lead,
+      address: d.address, asset_details: d.assetDetails, seller: d.seller
     });
     document.getElementById('modal-backdrop').classList.remove('show');
     renderDealRows();
@@ -5237,6 +5309,249 @@
     renderDealRows();
     renderActionCenter();
     showToast('Deal deleted', d.name + ' removed from your pipeline.');
+  };
+
+  /* ══════════ DEAL PAGE ══════════ */
+  window.openDealPage = function(dealId) {
+    currentDealPageId = dealId;
+    var list = document.getElementById('pipeline-list-view');
+    var page = document.getElementById('deal-page');
+    if (list) list.style.display = 'none';
+    if (page) { page.style.display = 'block'; renderDealPage(dealId); }
+    window.scrollTo(0, 0);
+  };
+
+  window.closeDealPage = function() {
+    currentDealPageId = null;
+    var list = document.getElementById('pipeline-list-view');
+    var page = document.getElementById('deal-page');
+    if (page) page.style.display = 'none';
+    if (list) list.style.display = 'block';
+    renderDealRows();
+  };
+
+  function renderDealPage(dealId) {
+    var page = document.getElementById('deal-page');
+    var d = DEALS.find(function(x) { return x.id === dealId; });
+    if (!page || !d) return;
+
+    var statusOpts = STATUS_OPTIONS.map(function(o) {
+      return '<option value="' + o[0] + '"' + (o[0] === d.status ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('');
+
+    var sizeLabel = d.dealType === 'Multifamily' ? 'Units' : d.dealType === 'Land' ? 'Acres' : 'Building SF';
+    var sizeVal = (d.assetDetails && d.assetDetails.size) || '';
+    var importedUnits = d.gateData && d.gateData.imported && d.gateData.imported.units;
+    if (!sizeVal && importedUnits) sizeVal = importedUnits + ' (from import)';
+
+    var seller = d.seller || {};
+    var sellerBlock =
+      '<div class="profile-section"><div class="profile-section-title">Seller / ownership contact</div>' +
+      (seller.name || seller.phone || seller.email
+        ? '<div class="profile-info-grid">' +
+            (seller.name ? '<div class="profile-info-item"><div class="profile-info-label">Name</div><div class="profile-info-value">' + escapeHtml(seller.name) + '</div></div>' : '') +
+            (seller.phone ? '<div class="profile-info-item"><div class="profile-info-label">Phone</div><div class="profile-info-value"><a href="tel:' + seller.phone.replace(/\D/g, '') + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(seller.phone) + '</a></div></div>' : '') +
+            (seller.email ? '<div class="profile-info-item"><div class="profile-info-label">Email</div><div class="profile-info-value"><a href="mailto:' + seller.email + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(seller.email) + '</a></div></div>' : '') +
+          '</div>'
+        : '<div class="profile-info-value muted">No seller contact on file — use Edit to add name, phone, and email.</div>') +
+      '</div>';
+
+    // Open + completed tasks
+    var openTasks = TASKS.filter(function(t) { return t.dealId === dealId && !t.done; });
+    var doneTasks = TASKS.filter(function(t) { return t.dealId === dealId && t.done; })
+      .sort(function(a, b) { return (b.completedOn || '').localeCompare(a.completedOn || ''); });
+    openTasks.sort(function(a, b) {
+      var da = _daysUntil(a.followUpBy), db = _daysUntil(b.followUpBy);
+      if (da === null && db === null) return 0;
+      if (da === null) return 1;
+      if (db === null) return -1;
+      return da - db;
+    });
+    var openHtml = openTasks.length
+      ? openTasks.map(function(t) {
+          var days = _daysUntil(t.followUpBy);
+          var overdue = days !== null && days < 0;
+          return '<div class="dtd-item">' +
+            '<span class="dtd-chk" onclick="openCompleteModal(\'' + t.id + '\')"></span>' +
+            '<span class="dtd-title' + (overdue ? ' overdue' : '') + '" onclick="openEditTaskModal(\'' + t.id + '\')">' + escapeHtml(t.title) + '</span>' +
+            _daysBadge(days) +
+          '</div>';
+        }).join('')
+      : '<div class="profile-info-value muted" style="padding:4px 0;">Nothing open. Add the next move below.</div>';
+    var doneHtml = doneTasks.length
+      ? doneTasks.map(function(t) {
+          return '<div class="dtd-item" style="opacity:.75;">' +
+            '<span style="color:var(--moss);font-weight:700;">✓</span>' +
+            '<span style="text-decoration:line-through;color:var(--ink-mute);cursor:pointer;" onclick="reopenTask(\'' + t.id + '\');renderDealPage(\'' + dealId + '\')">' + escapeHtml(t.title) + '</span>' +
+            '<span style="font-size:10px;color:var(--ink-mute);">' + (t.completedOn || '') + '</span>' +
+            (t.completionNote ? '<span style="font-size:11px;font-style:italic;color:var(--ink-soft);">— ' + escapeHtml(t.completionNote) + '</span>' : '') +
+          '</div>';
+        }).join('')
+      : '';
+
+    // Deal notes
+    var notes = DEAL_NOTES.filter(function(n) { return n.dealId === dealId; })
+      .sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    var notesHtml = notes.length
+      ? '<div class="timeline">' + notes.map(function(n) {
+          return '<div class="timeline-item ' + (n.type || 'note') + '">' +
+            '<div class="timeline-date">' + (n.date || 'undated') + '</div>' +
+            '<div class="timeline-content"><span class="timeline-tag tag-' + (n.type || 'note') + '">' + (n.type || 'note') + '</span>' + escapeHtml(n.body) + '</div>' +
+          '</div>';
+        }).join('') + '</div>'
+      : '<div class="profile-info-value muted">No notes yet — log your first call or update below.</div>';
+
+    // Market activity
+    var activity = MARKET_ACTIVITY.filter(function(m) { return m.dealId === dealId; })
+      .sort(function(a, b) { return (b.dateShown || '').localeCompare(a.dateShown || ''); });
+    var activityHtml = activity.length
+      ? activity.map(function(m) {
+          var meta = OUTCOME_META[m.outcome] || { label: m.outcome || '—', color: 'muted', icon: '—' };
+          return '<div class="deal-history-item outcome-' + meta.color + '">' +
+            '<div class="deal-history-row1">' +
+              '<div class="deal-history-deal">' + escapeHtml(m.investor || '(unnamed investor)') + '</div>' +
+              '<div class="deal-history-date">' + (m.dateShown || '') +
+                ' <span style="cursor:pointer;color:var(--ink-mute);padding-left:6px;" title="Remove" onclick="deleteMarketActivity(\'' + m.id + '\')">×</span></div>' +
+            '</div>' +
+            '<div class="deal-history-row2">' +
+              '<span class="deal-history-outcome">' + meta.icon + ' ' + meta.label + '</span>' +
+              (m.amount ? '<span class="deal-history-amount">' + escapeHtml(m.amount) + '</span>' : '') +
+            '</div>' +
+            (m.comment ? '<div class="deal-history-comment">' + escapeHtml(m.comment) + '</div>' : '') +
+          '</div>';
+        }).join('')
+      : '<div class="profile-info-value muted">Nothing logged yet. Every investor you show this deal to goes here — and why they passed or advanced.</div>';
+
+    var outcomeOpts = Object.keys(OUTCOME_META).map(function(k) {
+      return '<option value="' + k + '">' + OUTCOME_META[k].label + '</option>';
+    }).join('');
+
+    var today = new Date().toISOString().slice(0, 10);
+
+    page.innerHTML =
+      '<div class="profile-back" onclick="closeDealPage()" style="border-radius:var(--r-md) var(--r-md) 0 0;border:1px solid var(--line);border-bottom:none;">← Back to pipeline</div>' +
+      '<div class="profile-card" style="border-radius:0 0 var(--r-md) var(--r-md);">' +
+        '<div class="profile-header">' +
+          '<div class="profile-header-body">' +
+            '<div class="profile-name">' + escapeHtml(d.name) + '</div>' +
+            '<div class="profile-subtitle">' +
+              '<span class="deal-type-tag ' + (TYPE_TAG[d.dealType] || 'dt-other') + '" style="margin-right:8px;">' + escapeHtml(d.dealType || 'Other') + '</span>' +
+              escapeHtml(d.submarket || '') + (d.address ? ' · ' + escapeHtml(d.address) : '') +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;align-items:center;position:absolute;top:20px;right:24px;">' +
+            '<button class="btn" style="font-size:12px;" onclick="openEditDealModal(\'' + dealId + '\')">Edit</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="company-overview">' +
+          '<div class="company-overview-item"><div class="company-overview-label">Status</div><div class="company-overview-value">' +
+            '<select class="row-status-select" data-status="' + d.status + '" style="width:auto;" onchange="changeStatusFromPage(\'' + dealId + '\', this.value, this)">' + statusOpts + '</select></div></div>' +
+          '<div class="company-overview-item"><div class="company-overview-label">Deal value</div><div class="company-overview-value">' + fmtMoney(d.amount || 0) + '</div></div>' +
+          '<div class="company-overview-item"><div class="company-overview-label">Fee</div><div class="company-overview-value">' + fmtMoney(d.fee || 0) + '</div></div>' +
+          '<div class="company-overview-item"><div class="company-overview-label">Client / Owner</div><div class="company-overview-value">' + escapeHtml(d.client || '—') + '</div></div>' +
+          '<div class="company-overview-item"><div class="company-overview-label">' + sizeLabel + '</div><div class="company-overview-value">' + escapeHtml(sizeVal || '—') + '</div></div>' +
+          '<div class="company-overview-item"><div class="company-overview-label">Lead</div><div class="company-overview-value">' + escapeHtml(d.lead || 'DF') + '</div></div>' +
+        '</div>' +
+        sellerBlock +
+        '<div class="profile-section">' +
+          '<div class="profile-section-title">To-dos &amp; activity</div>' +
+          openHtml +
+          '<div class="dtd-add" style="margin-top:10px;">' +
+            '<input type="text" id="dp-title-' + dealId + '" placeholder="Add a to-do for this deal…" onkeydown="if(event.key===\'Enter\')quickAddDealTask(\'' + dealId + '\', \'dp\')" />' +
+            '<input type="date" id="dp-date-' + dealId + '" />' +
+            '<button onclick="quickAddDealTask(\'' + dealId + '\', \'dp\')">Add</button>' +
+          '</div>' +
+          (doneHtml ? '<div style="margin-top:14px;padding-top:10px;border-top:1px dashed var(--line);"><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);font-weight:700;margin-bottom:6px;">Completed</div>' + doneHtml + '</div>' : '') +
+        '</div>' +
+        '<div class="profile-section">' +
+          '<div class="profile-section-title">Deal notes</div>' +
+          notesHtml +
+          '<div class="log-form" style="margin-top:12px;">' +
+            '<div class="log-form-row">' +
+              '<select id="dn-type-' + dealId + '"><option value="call">Call</option><option value="note">Note</option><option value="email">Email</option><option value="meeting">Meeting</option></select>' +
+              '<input type="date" id="dn-date-' + dealId + '" value="' + today + '" />' +
+            '</div>' +
+            '<textarea id="dn-body-' + dealId + '" placeholder="What happened — owner call notes, pricing conversations, anything worth remembering about this deal." style="width:100%;min-height:70px;padding:9px 11px;border:1px solid var(--line);border-radius:var(--r-sm);font-family:inherit;font-size:13px;line-height:1.5;resize:vertical;"></textarea>' +
+            '<div class="log-form-actions"><button class="btn primary" onclick="saveDealNote(\'' + dealId + '\')">Save note</button></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="profile-section">' +
+          '<div class="profile-section-title">Market activity · who has seen this deal</div>' +
+          '<div class="deal-history-list">' + activityHtml + '</div>' +
+          '<div class="log-form" style="margin-top:12px;">' +
+            '<div class="log-form-row">' +
+              '<input type="text" id="ma-investor-' + dealId + '" placeholder="Investor / firm name" style="grid-column:1/-1;" />' +
+            '</div>' +
+            '<div class="log-form-row">' +
+              '<select id="ma-outcome-' + dealId + '">' + outcomeOpts + '</select>' +
+              '<input type="date" id="ma-date-' + dealId + '" value="' + today + '" />' +
+            '</div>' +
+            '<div class="log-form-row">' +
+              '<input type="text" id="ma-amount-' + dealId + '" placeholder="Amount (optional, e.g. $12.2M)" />' +
+              '<input type="text" id="ma-comment-' + dealId + '" placeholder="Comment — why they passed, what they said" />' +
+            '</div>' +
+            '<div class="log-form-actions"><button class="btn primary" onclick="saveMarketActivity(\'' + dealId + '\')">Log activity</button></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  window.changeStatusFromPage = function(dealId, newStatus, pageSelectEl) {
+    var rowSelect = document.querySelector('.pipeline-row[data-id="' + dealId + '"] .row-status-select');
+    if (rowSelect) {
+      rowSelect.value = newStatus;
+      changeStatus(dealId, newStatus, rowSelect);
+      pageSelectEl.setAttribute('data-status', newStatus);
+    } else {
+      // row not rendered (shouldn't happen) — persist directly
+      var d = DEALS.find(function(x) { return x.id === dealId; });
+      if (d) { d.status = newStatus; persistDeal(dealId, { status: newStatus }); }
+    }
+  };
+
+  window.saveDealNote = function(dealId) {
+    var type = document.getElementById('dn-type-' + dealId).value;
+    var date = document.getElementById('dn-date-' + dealId).value;
+    var body = document.getElementById('dn-body-' + dealId).value.trim();
+    if (!body) { alert('Write the note first.'); return; }
+    var note = { id: 'n' + Date.now().toString(36), dealId: dealId, type: type, date: date, body: body };
+    DEAL_NOTES.unshift(note);
+    if (window._db && window._db.insertDealNote) {
+      window._db.insertDealNote(note).then(function(row) { if (row) note.id = row.id; });
+    }
+    renderDealPage(dealId);
+    showToast('Note saved', body.slice(0, 60));
+  };
+
+  window.saveMarketActivity = function(dealId) {
+    var investor = document.getElementById('ma-investor-' + dealId).value.trim();
+    if (!investor) { alert('Investor name is required.'); return; }
+    var entry = {
+      id: 'm' + Date.now().toString(36),
+      dealId: dealId,
+      investor: investor,
+      contactId: null,
+      dateShown: document.getElementById('ma-date-' + dealId).value,
+      outcome: document.getElementById('ma-outcome-' + dealId).value,
+      amount: document.getElementById('ma-amount-' + dealId).value.trim(),
+      comment: document.getElementById('ma-comment-' + dealId).value.trim()
+    };
+    MARKET_ACTIVITY.unshift(entry);
+    if (window._db && window._db.insertMarketActivity) {
+      window._db.insertMarketActivity(entry).then(function(row) { if (row) entry.id = row.id; });
+    }
+    renderDealPage(dealId);
+    showToast('Market activity logged', investor + ' · ' + (OUTCOME_META[entry.outcome] || {}).label);
+  };
+
+  window.deleteMarketActivity = function(id) {
+    if (!confirm('Remove this market activity entry?')) return;
+    var idx = MARKET_ACTIVITY.findIndex(function(m) { return m.id === id; });
+    if (idx < 0) return;
+    var dealId = MARKET_ACTIVITY[idx].dealId;
+    MARKET_ACTIVITY.splice(idx, 1);
+    if (window._db && window._db.deleteMarketActivity) window._db.deleteMarketActivity(id);
+    renderDealPage(dealId);
   };
 
   function _uuidOrNull(v) {
@@ -5279,21 +5594,22 @@
     fillGroup('queue-overdue-group', 'queue-overdue', 'queue-overdue-count', overdue);
     fillGroup('queue-today-group', 'queue-today', 'queue-today-count', dueToday);
     fillGroup('queue-upcoming-group', 'queue-upcoming', 'queue-upcoming-count', upcoming);
-    // Done tasks render at the bottom of the No-date group so completions stay visible this session
-    fillGroup('queue-someday-group', 'queue-someday', 'queue-someday-count', someday, done);
+    fillGroup('queue-someday-group', 'queue-someday', 'queue-someday-count', someday);
 
-    // "Need action" stat: deals with an overdue task + deals with no open task at all
-    var dealsWithOverdue = {};
-    overdue.forEach(function(t) { if (t.dealId) dealsWithOverdue[t.dealId] = true; });
-    var dealsWithAnyTask = {};
-    open.forEach(function(t) { if (t.dealId) dealsWithAnyTask[t.dealId] = true; });
-    var needsAction = Object.keys(dealsWithOverdue).length;
-    Object.keys(DEAL_NAMES).forEach(function(id) {
-      var row = document.querySelector('.pipeline-row[data-id="' + id + '"]');
-      var visible = row && row.style.display !== 'none';
-      if (visible && !dealsWithAnyTask[id]) needsAction++;
-    });
-    _setText('psb-needs-action', needsAction);
+    // Completed-today strip (collapsed by default; permanent record lives on deal/contact pages)
+    var todayStr = new Date().toISOString().slice(0, 10);
+    var doneToday = done.filter(function(t) { return t.completedOn === todayStr; });
+    if (currentDealPageId) renderDealPage(currentDealPageId);
+    var cg = document.getElementById('queue-completed-group');
+    if (cg) {
+      if (doneToday.length === 0) { cg.style.display = 'none'; }
+      else {
+        cg.style.display = 'block';
+        _setText('completed-count', doneToday.length);
+        var body = document.getElementById('queue-completed');
+        if (body) body.innerHTML = doneToday.map(renderActionItem).join('');
+      }
+    }
 
     renderNextActions();
   }
@@ -5334,6 +5650,15 @@
     });
     renderDealTaskDrawers();
   }
+
+  window.toggleCompletedStrip = function() {
+    var body = document.getElementById('queue-completed');
+    var caret = document.getElementById('completed-caret');
+    if (!body) return;
+    var open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'block';
+    if (caret) caret.textContent = open ? '▾' : '▴';
+  };
 
   window.toggleDealTasks = function(dealId) {
     expandedDeals[dealId] = !expandedDeals[dealId];
@@ -5378,9 +5703,10 @@
     });
   }
 
-  window.quickAddDealTask = function(dealId) {
-    var titleEl = document.getElementById('dtd-title-' + dealId);
-    var dateEl = document.getElementById('dtd-date-' + dealId);
+  window.quickAddDealTask = function(dealId, prefix) {
+    var p = prefix || 'dtd';
+    var titleEl = document.getElementById(p + '-title-' + dealId);
+    var dateEl = document.getElementById(p + '-date-' + dealId);
     var title = titleEl ? titleEl.value.trim() : '';
     if (!title) { if (titleEl) titleEl.focus(); return; }
     var task = {
@@ -5398,6 +5724,7 @@
       window._db.insertTask(task).then(function(row) { if (row) task.id = row.id; renderActionCenter(); });
     }
     renderActionCenter();
+    if (currentDealPageId === dealId) renderDealPage(dealId);
     showToast('To-do added', title);
   };
 
@@ -5737,18 +6064,16 @@ async function updateDbBadge() {
   try {
     var t = await sb.from('tasks').select('*', { count: 'exact', head: true });
     var d = await sb.from('deals').select('*', { count: 'exact', head: true });
-    var c = await sb.from('contacts').select('*', { count: 'exact', head: true });
     var failed = [];
     if (t.error) failed.push('tasks: ' + t.error.message);
     if (d.error) failed.push('deals: ' + d.error.message);
-    if (c.error) failed.push('contacts: ' + c.error.message);
     if (failed.length) {
       console.error('db badge errors:', failed);
       badge.textContent = 'db error — ' + failed[0].slice(0, 60) + ' (click to retry)';
       badge.style.background = 'var(--rose-soft)'; badge.style.color = 'var(--rose)';
       return;
     }
-    badge.textContent = '● live · ' + (d.count || 0) + ' deals · ' + (t.count || 0) + ' tasks · ' + (c.count || 0) + ' contacts';
+    badge.textContent = '● live · ' + (d.count || 0) + ' deals · ' + (t.count || 0) + ' tasks';
     badge.style.background = 'var(--moss-soft)'; badge.style.color = 'var(--moss)';
   } catch (e) {
     console.error('db badge exception:', e);
@@ -5804,8 +6129,30 @@ window._db = {
   },
   deleteDeal: async function(id) {
     await sb.from('tasks').update({ deal_id: null }).eq('deal_id', id);
+    await sb.from('timeline').delete().eq('deal_id', id);
+    await sb.from('deal_history').delete().eq('deal_id', id);
     var res = await sb.from('deals').delete().eq('id', id);
     if (res.error) console.error('deleteDeal', res.error);
+  },
+  insertDealNote: async function(n) {
+    var res = await sb.from('timeline').insert({
+      deal_id: n.dealId, type: n.type, date: n.date,
+      title: (n.body || '').slice(0, 80) || n.type, body: n.body
+    }).select().single();
+    if (res.error) { console.error('insertDealNote', res.error); return null; }
+    return res.data;
+  },
+  insertMarketActivity: async function(m) {
+    var res = await sb.from('deal_history').insert({
+      deal_id: m.dealId, investor_name: m.investor, date_shown: m.dateShown || null,
+      outcome: m.outcome, amount: m.amount || null, comment: m.comment || null
+    }).select().single();
+    if (res.error) { console.error('insertMarketActivity', res.error); return null; }
+    return res.data;
+  },
+  deleteMarketActivity: async function(id) {
+    var res = await sb.from('deal_history').delete().eq('id', id);
+    if (res.error) console.error('deleteMarketActivity', res.error);
   }
 };
 
@@ -5816,7 +6163,19 @@ async function hydrateFromDb() {
     console.error('hydrate failed', dealsRes.error, tasksRes.error);
     return;
   }
-  if (window.atelierHydrate) window.atelierHydrate(dealsRes.data, tasksRes.data);
+  // Deal notes + market activity: tolerate a not-yet-migrated database
+  var notesData = [], historyData = [];
+  try {
+    var notesRes = await sb.from('timeline').select('*').not('deal_id', 'is', null).order('date', { ascending: false });
+    if (!notesRes.error) notesData = notesRes.data;
+    else console.error('deal notes fetch (run migration 2?):', notesRes.error.message);
+  } catch (e) { console.error('deal notes fetch failed', e); }
+  try {
+    var histRes = await sb.from('deal_history').select('*').order('date_shown', { ascending: false });
+    if (!histRes.error) historyData = histRes.data;
+    else console.error('market activity fetch (run migration 2?):', histRes.error.message);
+  } catch (e) { console.error('market activity fetch failed', e); }
+  if (window.atelierHydrate) window.atelierHydrate(dealsRes.data, tasksRes.data, notesData, historyData);
 }
 
 sb.auth.onAuthStateChange(function(event, session) {
