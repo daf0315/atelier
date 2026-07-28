@@ -2662,6 +2662,82 @@
   .row-deal-name { cursor: pointer; }
   .row-deal-name:hover { color: var(--sunrise); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
 
+  /* ── Deal task drawer (Option C) ── */
+  .deal-task-drawer {
+    grid-column: 1 / -1;
+    background: var(--cream);
+    border-top: 1px dashed var(--line);
+    padding: 10px 16px 12px 136px;
+  }
+  .dtd-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 5px 0;
+    font-size: 12px;
+  }
+  .dtd-chk {
+    width: 13px; height: 13px;
+    border: 1.5px solid var(--line);
+    border-radius: 3px;
+    flex-shrink: 0;
+    cursor: pointer;
+    background: white;
+  }
+  .dtd-chk:hover { border-color: var(--moss); background: var(--moss-soft); }
+  .dtd-title { cursor: pointer; color: var(--ink-soft); }
+  .dtd-title:hover { color: var(--sunrise); }
+  .dtd-title.overdue { color: var(--rose); font-weight: 600; }
+  .dtd-add {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    max-width: 420px;
+  }
+  .dtd-add input[type=text] {
+    flex: 1;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 9px;
+    font-size: 12px;
+    font-family: inherit;
+  }
+  .dtd-add input[type=date] {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    color: var(--ink-soft);
+  }
+  .dtd-add button {
+    border: none;
+    background: var(--sunrise);
+    color: white;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .next-add-icon {
+    width: 20px; height: 20px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-mute);
+    font-size: 13px;
+    cursor: pointer;
+    flex-shrink: 0;
+    background: white;
+    line-height: 1;
+  }
+  .next-add-icon:hover { color: var(--sunrise); border-color: var(--sunrise); }
+  .next-summary { cursor: pointer; }
+  .next-summary:hover { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+
   .toast {
     position: fixed;
     bottom: 30px;
@@ -2927,19 +3003,18 @@
       <div class="pipeline-summary">
         <div class="pipeline-summary-stats">
           <div>
-            <div class="ps-stat-num">$284M</div>
+            <div class="ps-stat-num" id="pt-total">—</div>
             <div class="ps-stat-label">Total deal value</div>
           </div>
           <div>
-            <div class="ps-stat-num moss">$92M</div>
-            <div class="ps-stat-label">Probability-weighted</div>
+            <div class="ps-stat-num gold" id="pt-fees">—</div>
+            <div class="ps-stat-label">Projected fees</div>
           </div>
           <div>
-            <div class="ps-stat-num gold">~$2.3M</div>
-            <div class="ps-stat-label">Projected commission</div>
+            <div class="ps-stat-num moss" id="pt-count">—</div>
+            <div class="ps-stat-label">Active deals</div>
           </div>
         </div>
-        <div class="pipeline-pace">Q2 pace: <span class="pace-good">+12%</span> vs target</div>
       </div>
 
       <div id="pipeline-empty" style="display:none;background:white;border:1.5px dashed var(--line);border-radius:var(--r-md);padding:40px;text-align:center;margin-bottom:14px;">
@@ -4980,6 +5055,12 @@
     if (pc) pc.textContent = active.length + (active.length === 1 ? ' deal' : ' deals');
     var qsp = document.getElementById('qs-pipeline');
     if (qsp) qsp.textContent = fmtMoney(total);
+    var ptT = document.getElementById('pt-total');
+    var ptF = document.getElementById('pt-fees');
+    var ptC = document.getElementById('pt-count');
+    if (ptT) ptT.textContent = fmtMoney(total);
+    if (ptF) ptF.textContent = fmtMoney(fees);
+    if (ptC) ptC.textContent = active.length;
   }
 
   // Called by the auth layer after login with rows from the database
@@ -5217,17 +5298,20 @@
     renderNextActions();
   }
 
+  var expandedDeals = {};
+
   function renderNextActions() {
     Object.keys(DEAL_NAMES).forEach(function(dealId) {
       var cell = document.getElementById('next-' + dealId);
       if (!cell) return;
       var dealTasks = TASKS.filter(function(t) { return t.dealId === dealId && !t.done; });
+      var plusIcon = '<span class="next-add-icon" title="Add a to-do to this deal" onclick="event.stopPropagation();openTaskModal(\'deal-followup\', \'' + dealId + '\')">+</span>';
       if (dealTasks.length === 0) {
         cell.innerHTML = '<span class="next-dot gray"></span>' +
-          '<span class="next-text none" onclick="event.stopPropagation();openTaskModal(\'deal-followup\', \'' + dealId + '\')">No next action — set one</span>';
+          '<span class="next-text none" onclick="event.stopPropagation();openTaskModal(\'deal-followup\', \'' + dealId + '\')">No next action — set one</span>' +
+          plusIcon;
         return;
       }
-      // Most urgent task wins the cell
       dealTasks.sort(function(a, b) {
         var da = _daysUntil(a.followUpBy), db = _daysUntil(b.followUpBy);
         if (da === null && db === null) return 0;
@@ -5235,20 +5319,87 @@
         if (db === null) return -1;
         return da - db;
       });
-      var t = dealTasks[0];
-      var d = _daysUntil(t.followUpBy);
-      var dot, cls = '', suffix = '';
-      if (d === null) { dot = 'green'; }
-      else if (d < 0) { dot = 'red'; cls = ' warn'; suffix = ' — ' + Math.abs(d) + 'd overdue'; }
-      else if (d === 0) { dot = 'orange'; suffix = ' — today'; }
-      else if (d === 1) { dot = 'green'; suffix = ' — tomorrow'; }
-      else { dot = 'green'; suffix = ' — in ' + d + 'd'; }
-      var extra = dealTasks.length > 1 ? ' (+' + (dealTasks.length - 1) + ')' : '';
+      var mostUrgent = _daysUntil(dealTasks[0].followUpBy);
+      var overdueCount = dealTasks.filter(function(t) { var d = _daysUntil(t.followUpBy); return d !== null && d < 0; }).length;
+      var dot, cls = '';
+      if (mostUrgent !== null && mostUrgent < 0) { dot = 'red'; cls = ' warn'; }
+      else if (mostUrgent === 0) { dot = 'orange'; }
+      else { dot = 'green'; }
+      var caret = expandedDeals[dealId] ? '▴' : '▾';
+      var label = dealTasks.length + ' to-do' + (dealTasks.length === 1 ? '' : 's') + ' ' + caret +
+        (overdueCount > 0 ? ' (' + overdueCount + ' overdue)' : '');
       cell.innerHTML = '<span class="next-dot ' + dot + '"></span>' +
-        '<span class="next-text' + cls + '" title="' + escapeHtml(t.title) + '">' +
-        escapeHtml(t.title) + suffix + extra + '</span>';
+        '<span class="next-text next-summary' + cls + '" onclick="event.stopPropagation();toggleDealTasks(\'' + dealId + '\')" title="Click to see all to-dos">' + label + '</span>' +
+        plusIcon;
+    });
+    renderDealTaskDrawers();
+  }
+
+  window.toggleDealTasks = function(dealId) {
+    expandedDeals[dealId] = !expandedDeals[dealId];
+    renderNextActions();
+  };
+
+  function renderDealTaskDrawers() {
+    // remove existing drawers, re-insert for expanded deals
+    document.querySelectorAll('.deal-task-drawer').forEach(function(el) { el.remove(); });
+    Object.keys(expandedDeals).forEach(function(dealId) {
+      if (!expandedDeals[dealId]) return;
+      var row = document.querySelector('.pipeline-row[data-id="' + dealId + '"]');
+      if (!row) return;
+      var dealTasks = TASKS.filter(function(t) { return t.dealId === dealId && !t.done; });
+      dealTasks.sort(function(a, b) {
+        var da = _daysUntil(a.followUpBy), db = _daysUntil(b.followUpBy);
+        if (da === null && db === null) return 0;
+        if (da === null) return 1;
+        if (db === null) return -1;
+        return da - db;
+      });
+      var items = dealTasks.length
+        ? dealTasks.map(function(t) {
+            var d = _daysUntil(t.followUpBy);
+            var overdue = d !== null && d < 0;
+            return '<div class="dtd-item">' +
+              '<span class="dtd-chk" title="Complete this to-do" onclick="openCompleteModal(\'' + t.id + '\')"></span>' +
+              '<span class="dtd-title' + (overdue ? ' overdue' : '') + '" onclick="openEditTaskModal(\'' + t.id + '\')">' + escapeHtml(t.title) + '</span>' +
+              _daysBadge(d) +
+            '</div>';
+          }).join('')
+        : '<div class="dtd-item" style="color:var(--ink-mute);font-style:italic;">All clear — add the next move below.</div>';
+      var drawer = document.createElement('div');
+      drawer.className = 'deal-task-drawer';
+      drawer.innerHTML = items +
+        '<div class="dtd-add">' +
+          '<input type="text" id="dtd-title-' + dealId + '" placeholder="Add a to-do for this deal…" onkeydown="if(event.key===\'Enter\')quickAddDealTask(\'' + dealId + '\')" />' +
+          '<input type="date" id="dtd-date-' + dealId + '" />' +
+          '<button onclick="quickAddDealTask(\'' + dealId + '\')">Add</button>' +
+        '</div>';
+      row.insertAdjacentElement('afterend', drawer);
     });
   }
+
+  window.quickAddDealTask = function(dealId) {
+    var titleEl = document.getElementById('dtd-title-' + dealId);
+    var dateEl = document.getElementById('dtd-date-' + dealId);
+    var title = titleEl ? titleEl.value.trim() : '';
+    if (!title) { if (titleEl) titleEl.focus(); return; }
+    var task = {
+      id: 't' + Date.now().toString(36),
+      type: 'deal-followup',
+      title: title,
+      contactId: null,
+      dealId: dealId,
+      followUpBy: (dateEl && dateEl.value) || null,
+      createdOn: new Date().toISOString().slice(0, 10),
+      done: false
+    };
+    TASKS.push(task);
+    if (window._db && window._db.insertTask) {
+      window._db.insertTask(task).then(function(row) { if (row) task.id = row.id; renderActionCenter(); });
+    }
+    renderActionCenter();
+    showToast('To-do added', title);
+  };
 
   function _setText(id, val) {
     var el = document.getElementById(id);
@@ -5580,21 +5731,45 @@ window.atelierSignOut = async function() {
 async function updateDbBadge() {
   var badge = document.getElementById('db-badge');
   if (!badge) return;
+  badge.style.cursor = 'pointer';
+  badge.title = 'Click to refresh connection status';
+  badge.onclick = function() { badge.textContent = 'checking…'; updateDbBadge(); };
   try {
     var t = await sb.from('tasks').select('*', { count: 'exact', head: true });
     var d = await sb.from('deals').select('*', { count: 'exact', head: true });
     var c = await sb.from('contacts').select('*', { count: 'exact', head: true });
-    if (t.error || d.error || c.error) {
-      badge.textContent = 'db error';
+    var failed = [];
+    if (t.error) failed.push('tasks: ' + t.error.message);
+    if (d.error) failed.push('deals: ' + d.error.message);
+    if (c.error) failed.push('contacts: ' + c.error.message);
+    if (failed.length) {
+      console.error('db badge errors:', failed);
+      badge.textContent = 'db error — ' + failed[0].slice(0, 60) + ' (click to retry)';
       badge.style.background = 'var(--rose-soft)'; badge.style.color = 'var(--rose)';
       return;
     }
     badge.textContent = '● live · ' + (d.count || 0) + ' deals · ' + (t.count || 0) + ' tasks · ' + (c.count || 0) + ' contacts';
+    badge.style.background = 'var(--moss-soft)'; badge.style.color = 'var(--moss)';
   } catch (e) {
-    badge.textContent = 'offline';
+    console.error('db badge exception:', e);
+    badge.textContent = 'offline — ' + (e.message || 'network').slice(0, 50) + ' (click to retry)';
     badge.style.background = 'var(--rose-soft)'; badge.style.color = 'var(--rose)';
   }
 }
+// Refresh the badge after any successful DB write so counts stay honest
+var _origDbNames = ['insertDeal','updateDeal','insertTask','updateTask','deleteTask','deleteDeal'];
+setTimeout(function() {
+  if (!window._db) return;
+  _origDbNames.forEach(function(fn) {
+    if (!window._db[fn]) return;
+    var orig = window._db[fn];
+    window._db[fn] = async function() {
+      var out = await orig.apply(null, arguments);
+      updateDbBadge();
+      return out;
+    };
+  });
+}, 0);
 
 window._db = {
   insertDeal: async function(payload) {
