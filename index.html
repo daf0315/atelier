@@ -624,10 +624,10 @@
 
   .row-status-select {
     font-family: inherit;
-    font-size: 9px;
+    font-size: 8px;
     font-weight: 700;
-    letter-spacing: 0.08em;
-    padding: 4px 8px;
+    letter-spacing: 0.03em;
+    padding: 4px 5px;
     border-radius: var(--r-pill);
     text-transform: uppercase;
     border: 1px solid transparent;
@@ -635,7 +635,8 @@
     appearance: none;
     -webkit-appearance: none;
     text-align: center;
-    padding-right: 18px;
+    padding-right: 14px;
+    width: 100%;
     background-color: var(--cream-deep);
     color: var(--ink-soft);
   }
@@ -5202,7 +5203,7 @@
       .map(function(o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join('');
     var html =
       '<div class="modal-header"><div class="modal-eyebrow">New deal</div>' +
-      '<div class="modal-title">Add a deal to the pipeline</div></div>' +
+      '<div class="modal-title">Add a deal to the ' + (includeArchival ? 'library' : 'pipeline') + '</div></div>' +
       '<div class="modal-body">' +
         '<div class="field"><label class="field-label required">Deal name</label>' +
           '<input class="field-input" id="nd-name" placeholder="e.g. Davie 6-acre MF site" /></div>' +
@@ -5223,7 +5224,7 @@
         '<div class="field"><label class="field-label">Lead</label><input class="field-input" id="nd-lead" value="DF" /></div>' +
       '</div>' +
       '<div class="modal-footer">' +
-        '<div class="modal-footer-left">Saves straight to your database.</div>' +
+        '<div class="modal-footer-left">' + (includeArchival ? 'Logs to your library — it won\'t appear in the active pipeline unless you give it an active status.' : 'Saves straight to your database.') + '</div>' +
         '<div class="modal-footer-right">' +
           '<button class="btn" onclick="closeModal()">Cancel</button>' +
           '<button class="btn primary" onclick="saveNewDeal()">Add deal</button>' +
@@ -5255,7 +5256,8 @@
                    amount: row.amount, fee: row.fee, gateData: {} });
       document.getElementById('modal-backdrop').classList.remove('show');
       renderDealRows();
-      showToast('Deal added', name + ' is in your pipeline — and in the database.');
+      var archived = (row.status === 'closed' || row.status === 'lost');
+      showToast('Deal added', name + (archived ? ' is in your library.' : ' is in your pipeline — and in the database.'));
     });
   };
 
@@ -5649,8 +5651,7 @@
         var reason = l.reason || d.lostReason || '';
         context = '<span class="lib-context lost">✕ ' + escapeHtml(reason || 'Lost') + (l.notes ? ' — ' + escapeHtml(l.notes) : '') + '</span>';
       } else {
-        var openCount = TASKS.filter(function(t) { return t.dealId === d.id && !t.done; }).length;
-        context = '<span class="lib-context">' + (openCount ? openCount + ' open to-do' + (openCount === 1 ? '' : 's') : 'No open to-dos') + '</span>';
+        context = '<span class="lib-context"></span>';
       }
       return '<div class="lib-row" onclick="openDealPage(\'' + d.id + '\')">' +
         '<span class="status-pill ' + pillClass + '" style="font-size:8.5px;">' + escapeHtml(statusLabel) + '</span>' +
@@ -6032,7 +6033,7 @@
           '<div class="field"><label class="field-label">Deal</label>' +
             '<select class="field-select" id="et-deal">' + dealOptions + '</select></div>' +
         '</div>' +
-        '<div class="field"><label class="field-label">Follow up by</label>' +
+        '<div class="field"><label class="field-label">Due by</label>' +
           '<input class="field-input" id="et-followup" type="date" value="' + (t.followUpBy || '') + '" />' +
           '<div style="display:flex;gap:6px;margin-top:8px;">' +
             '<button class="btn" style="font-size:11px;padding:5px 12px;" onclick="snoozeInModal(1)">+1 day</button>' +
@@ -6122,7 +6123,7 @@
           '<div class="field"><label class="field-label">Deal</label>' +
             '<select class="field-select" id="nt-deal">' + dealOptions + '</select></div>' +
         '</div>' +
-        '<div class="field"><label class="field-label">Follow up by <span class="hint">(when should this surface as urgent?)</span></label>' +
+        '<div class="field"><label class="field-label">Due by <span class="hint">(when should this surface as urgent?)</span></label>' +
           '<input class="field-input" id="nt-followup" type="date" /></div>' +
       '</div>' +
       '<div class="modal-footer">' +
