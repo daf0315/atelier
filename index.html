@@ -3674,7 +3674,21 @@
     if (dealRec) {
       dealRec.status = newStatus;
       if (gateData[dealId]) dealRec.gateData = gateData[dealId];
-      persistDeal(dealId, { status: newStatus, gate_data: dealRec.gateData || {} });
+      // Gate price becomes the deal value (awarded → UC → closed, latest wins)
+      var g = dealRec.gateData || {};
+      var gatePrice = null;
+      if (newStatus === 'awarded' && g.awarded) gatePrice = _parseMoney(g.awarded.price);
+      if (newStatus === 'undercontract' && g.undercontract) gatePrice = _parseMoney(g.undercontract.price);
+      if (newStatus === 'closed' && g.closed) gatePrice = _parseMoney(g.closed.finalPrice || g.closed.price);
+      var fields = { status: newStatus, gate_data: dealRec.gateData || {} };
+      if (gatePrice !== null && gatePrice > 0) {
+        dealRec.amount = gatePrice;
+        fields.amount = gatePrice;
+        var row = document.querySelector('.pipeline-row[data-id="' + dealId + '"]');
+        if (row) row.setAttribute('data-amount', gatePrice);
+      }
+      persistDeal(dealId, fields);
+      renderDealRows();
     }
     if (newStatus === 'closed' || newStatus === 'lost') {
       var row = document.querySelector('.pipeline-row[data-id="' + dealId + '"]');
@@ -4437,9 +4451,10 @@
 
   function daysSince(dateStr) {
     if (!dateStr) return null;
-    var t = new Date(dateStr);
+    var t = _localDate(dateStr);
     var now = new Date();
-    return Math.floor((now - t) / (1000 * 60 * 60 * 24));
+    now.setHours(0, 0, 0, 0);
+    return Math.round((now - t) / (1000 * 60 * 60 * 24));
   }
 
   function renderContactProfile(contactId) {
@@ -5036,13 +5051,19 @@
   var DEAL_NAMES = {};   // refreshed by refreshDealNames()
   function refreshDealNames() { DEAL_NAMES = DEAL_NAME_MAP(); }
 
+  function _localDate(dateStr) {
+    // 'YYYY-MM-DD' must be parsed as LOCAL midnight; new Date(str) treats it as UTC,
+    // which in Florida (UTC-4/5) lands on the previous day and shifts every deadline.
+    var p = String(dateStr).slice(0, 10).split('-');
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  }
+
   function _daysUntil(dateStr) {
     if (!dateStr) return null;
-    var target = new Date(dateStr);
-    target.setHours(0, 0, 0, 0);
+    var target = _localDate(dateStr);
     var now = new Date();
     now.setHours(0, 0, 0, 0);
-    return Math.floor((target - now) / (1000 * 60 * 60 * 24));
+    return Math.round((target - now) / (1000 * 60 * 60 * 24));
   }
 
   function _daysBadge(days) {
@@ -5558,6 +5579,11 @@
 
           '<div class="company-overview-item"><div class="company-overview-label">' + sizeLabel + '</div><div class="company-overview-value">' + escapeHtml(sizeVal || '—') + '</div></div>' +
           ((d.assetDetails && d.assetDetails.yearBuilt) ? '<div class="company-overview-item"><div class="company-overview-label">Year built</div><div class="company-overview-value">' + escapeHtml(d.assetDetails.yearBuilt) + '</div></div>' : '') +
+          (function() {
+            var g = d.gateData || {};
+            var buyer = (g.closed && g.closed.buyer) || (g.undercontract && g.undercontract.buyer) || (g.awarded && g.awarded.buyer) || '';
+            return buyer ? '<div class="company-overview-item"><div class="company-overview-label">Buyer</div><div class="company-overview-value">' + escapeHtml(buyer) + '</div></div>' : '';
+          })() +
           '<div class="company-overview-item"><div class="company-overview-label">Lead</div><div class="company-overview-value">' + escapeHtml(d.lead || 'DF') + '</div></div>' +
         '</div>' +
         sellerBlock +
@@ -5730,6 +5756,20 @@
     if (window._db && window._db.deleteMarketActivity) window._db.deleteMarketActivity(id);
     renderDealPage(dealId);
   };
+
+  function _parseMoney(s) {
+    if (s === null || s === undefined) return null;
+    if (typeof s === 'number') return s;
+    var str = String(s).trim().replace(/[$,\s]/g, '');
+    if (!str) return null;
+    var mult = 1;
+    var last = str.slice(-1).toUpperCase();
+    if (last === 'M') { mult = 1e6; str = str.slice(0, -1); }
+    else if (last === 'K') { mult = 1e3; str = str.slice(0, -1); }
+    else if (last === 'B') { mult = 1e9; str = str.slice(0, -1); }
+    var n = parseFloat(str);
+    return isNaN(n) ? null : n * mult;
+  }
 
   function _uuidOrNull(v) {
     return (typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) ? v : null;
