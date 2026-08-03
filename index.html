@@ -3669,7 +3669,7 @@
   }
 
   function commitChange(dealId, dealName, newStatus, oldStatus, selectEl) {
-    selectEl.setAttribute('data-status', newStatus);
+    if (selectEl) selectEl.setAttribute('data-status', newStatus);
     var dealRec = DEALS.find(function(x) { return x.id === dealId; });
     if (dealRec) {
       dealRec.status = newStatus;
@@ -3686,6 +3686,10 @@
         fields.amount = gatePrice;
         var row = document.querySelector('.pipeline-row[data-id="' + dealId + '"]');
         if (row) row.setAttribute('data-amount', gatePrice);
+      }
+      if (newStatus === 'closed' && g.closed && g.closed.feeEarned) {
+        var gateFee = _parseMoney(g.closed.feeEarned);
+        if (gateFee !== null && gateFee > 0) { dealRec.fee = gateFee; fields.fee = gateFee; }
       }
       persistDeal(dealId, fields);
       renderDealRows();
@@ -3861,8 +3865,15 @@
       alert('Buyer, Price, PSA Effective Date, and DD End are required.');
       return;
     }
+    function gv(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
     gateData[dealId] = gateData[dealId] || {};
-    gateData[dealId].undercontract = { buyer: buyer, price: price, psaDate: psaDate, ddEnd: ddEnd };
+    gateData[dealId].undercontract = {
+      buyer: buyer, price: price, psaDate: psaDate, ddEnd: ddEnd,
+      expectedClosing: gv('g-close') || null,
+      deposit1: gv('g-d1') || null, deposit1Due: gv('g-d1d') || null,
+      deposit2: gv('g-d2') || null, deposit2Due: gv('g-d2d') || null,
+      extCount: gv('g-ec') || null, extLength: gv('g-el') || null, extFee: gv('g-ef') || null
+    };
     window._modalCancel = null;
     document.getElementById('modal-backdrop').classList.remove('show');
     commitChange(dealId, dealName, 'undercontract', oldStatus, getSelectForDeal(dealId));
@@ -3902,7 +3913,8 @@
     var sl = document.getElementById('g-sl').value.trim();
     if (!fp || !fe || !fb || !sl) { alert('Price, Fee, Buyer, and Seller are required.'); return; }
     gateData[dealId] = gateData[dealId] || {};
-    gateData[dealId].closed = { finalPrice: fp, feeEarned: fe, finalBuyer: fb, seller: sl };
+    var cd = document.getElementById('g-cd') ? document.getElementById('g-cd').value : '';
+    gateData[dealId].closed = { finalPrice: fp, feeEarned: fe, finalBuyer: fb, seller: sl, closeDate: cd || null, buyer: fb };
     window._modalCancel = null;
     document.getElementById('modal-backdrop').classList.remove('show');
     commitChange(dealId, dealName, 'closed', oldStatus, getSelectForDeal(dealId));
@@ -5587,6 +5599,39 @@
           '<div class="company-overview-item"><div class="company-overview-label">Lead</div><div class="company-overview-value">' + escapeHtml(d.lead || 'DF') + '</div></div>' +
         '</div>' +
         sellerBlock +
+        (function() {
+          var g = d.gateData || {};
+          var transactional = ['awarded', 'undercontract', 'closing', 'closed'].indexOf(d.status) >= 0;
+          var uc = g.undercontract || {};
+          var aw = g.awarded || {};
+          var cl = g.closed || {};
+          if (!transactional && !uc.buyer && !aw.buyer && !cl.finalBuyer) return '';
+          function item(label, val) {
+            return val ? '<div class="profile-info-item"><div class="profile-info-label">' + label + '</div><div class="profile-info-value">' + escapeHtml(val) + '</div></div>' : '';
+          }
+          var rows =
+            item('Buyer', cl.finalBuyer || uc.buyer || aw.buyer) +
+            item('Purchase price', cl.finalPrice || uc.price || aw.price) +
+            item('PSA effective', uc.psaDate) +
+            item('DD period ends', uc.ddEnd) +
+            item('Expected closing', uc.expectedClosing) +
+            item('Initial deposit', uc.deposit1 ? uc.deposit1 + (uc.deposit1Due ? ' · due ' + uc.deposit1Due : '') : '') +
+            item('Additional deposit', uc.deposit2 ? uc.deposit2 + (uc.deposit2Due ? ' · due ' + uc.deposit2Due : '') : '') +
+            item('Extensions', uc.extCount ? uc.extCount + (uc.extLength ? ' × ' + uc.extLength : '') + (uc.extFee ? ' @ ' + uc.extFee : '') : '') +
+            item('Closed date', cl.closeDate) +
+            item('Fee earned', cl.feeEarned) +
+            item('Seller of record', cl.seller);
+          var updateBtn = '';
+          if (d.status === 'awarded' || d.status === 'undercontract' || d.status === 'closing') {
+            var gateFn = d.status === 'awarded' ? 'openGateAwarded' : 'openGateUnderContract';
+            updateBtn = '<button class="btn" style="font-size:11px;margin-top:10px;" onclick="' + gateFn + '(\'' + d.id + '\', \'' + escapeJs(d.name) + '\', \'' + (d.status === 'awarded' ? 'awarded' : 'undercontract') + '\', \'' + d.status + '\', getSelectForDeal(\'' + d.id + '\'))">Update terms</button>';
+          }
+          return '<div class="profile-section">' +
+            '<div class="profile-section-title">Transaction</div>' +
+            (rows ? '<div class="profile-info-grid">' + rows + '</div>' : '<div class="profile-info-value muted">Terms get captured as the deal moves through Awarded and Under Contract.</div>') +
+            updateBtn +
+          '</div>';
+        })() +
         '<div class="profile-section">' +
           '<div class="profile-section-title">To-dos &amp; activity</div>' +
           openHtml +
