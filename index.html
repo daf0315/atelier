@@ -3629,10 +3629,10 @@
   var gateData = {};
 
   window.changeStatus = function(dealId, newStatus, selectEl) {
-    var row = document.querySelector('.pipeline-row[data-id="' + dealId + '"]');
-    if (!row) return;
-    var dealName = row.querySelector('.row-deal-name').textContent;
-    var oldStatus = selectEl.getAttribute('data-status');
+    var dealRec = DEALS.find(function(x) { return x.id === dealId; });
+    if (!dealRec) return;
+    var dealName = dealRec.name;
+    var oldStatus = (selectEl && selectEl.getAttribute('data-status')) || dealRec.status;
 
     // Gate routing: destination-based.
     // Any move TO a gated status triggers the gate, regardless of where we came from.
@@ -3753,6 +3753,7 @@
   }
 
   function revertSelect(selectEl, oldStatus) {
+    if (!selectEl) return;
     selectEl.value = oldStatus;
     selectEl.setAttribute('data-status', oldStatus);
   }
@@ -3799,8 +3800,12 @@
   function openGateAwarded(dealId, dealName, newStatus, oldStatus, selectEl) {
     var html = gateHeader('Gate · Awarding deal', dealName, 'Capture the buyer and price you\'re binding by LOI.') +
       '<div class="modal-body">' +
-      '<div class="field"><label class="field-label required">Buyer Group</label>' +
-      '<input class="field-input" id="g-buyer" placeholder="e.g. Mast Capital, BREDS IV" /></div>' +
+      '<div class="field-row">' +
+      '<div class="field"><label class="field-label required">Buyer Company</label>' +
+      '<input class="field-input" id="g-buyer" placeholder="e.g. Mast Capital" /></div>' +
+      '<div class="field"><label class="field-label">Buyer Contact Name</label>' +
+      '<input class="field-input" id="g-buyer-contact" placeholder="e.g. Chris Holland" /></div>' +
+      '</div>' +
       '<div class="field"><label class="field-label required">Purchase Price</label>' +
       '<input class="field-input" id="g-price" placeholder="$48,000,000" />' +
       '<div class="field-help">Will be confirmed and editable at the Under Contract gate.</div></div>' +
@@ -3812,10 +3817,11 @@
   window.saveAwarded = function(dealId, dealName, oldStatus) {
     var buyer = document.getElementById('g-buyer').value.trim();
     var price = document.getElementById('g-price').value.trim();
-    if (!buyer) { alert('Buyer Group is required.'); return; }
+    if (!buyer) { alert('Buyer Company is required.'); return; }
     if (!price) { alert('Purchase Price is required.'); return; }
+    var bc = document.getElementById('g-buyer-contact');
     gateData[dealId] = gateData[dealId] || {};
-    gateData[dealId].awarded = { buyer: buyer, price: price };
+    gateData[dealId].awarded = { buyer: buyer, price: price, buyerContact: (bc && bc.value.trim()) || null };
     window._modalCancel = null;
     document.getElementById('modal-backdrop').classList.remove('show');
     commitChange(dealId, dealName, 'awarded', oldStatus, getSelectForDeal(dealId));
@@ -3826,11 +3832,13 @@
     var html = gateHeader('Gate · Under Contract', dealName, 'Confirm binding terms and PSA dates. TBD is OK.') +
       '<div class="modal-body">' +
       '<div class="field-row">' +
-      '<div class="field"><label class="field-label required">Buyer Group</label>' +
+      '<div class="field"><label class="field-label required">Buyer Company</label>' +
       '<input class="field-input" id="g-buyer" value="' + escapeHtml(prior.buyer || '') + '" /></div>' +
+      '<div class="field"><label class="field-label">Buyer Contact Name</label>' +
+      '<input class="field-input" id="g-buyer-contact" value="' + escapeHtml(prior.buyerContact || '') + '" /></div>' +
+      '</div>' +
       '<div class="field"><label class="field-label required">Purchase Price <span class="hint">(final PSA)</span></label>' +
       '<input class="field-input" id="g-price" value="' + escapeHtml(prior.price || '') + '" /></div>' +
-      '</div>' +
       '<div class="field"><label class="field-label required">PSA Effective Date</label>' +
       '<input class="field-input" id="g-psa-date" type="date" /></div>' +
       '<div class="field-row">' +
@@ -3839,7 +3847,7 @@
       '</div>' +
       '<div class="field-row">' +
       '<div class="field"><label class="field-label required">DD Period End</label><input class="field-input" id="g-dd" type="date" /></div>' +
-      '<div class="field"><label class="field-label">Closing Date</label><input class="field-input" id="g-close" type="date" /></div>' +
+      '<div class="field"><label class="field-label required">Expected Closing Date</label><input class="field-input" id="g-close" type="date" /></div>' +
       '</div>' +
       '<div class="field-row">' +
       '<div class="field"><label class="field-label">Additional Deposit</label><input class="field-input" id="g-d2" placeholder="$1M or TBD" /></div>' +
@@ -3861,14 +3869,16 @@
     var price = document.getElementById('g-price').value.trim();
     var psaDate = document.getElementById('g-psa-date').value;
     var ddEnd = document.getElementById('g-dd').value;
-    if (!buyer || !price || !psaDate || !ddEnd) {
-      alert('Buyer, Price, PSA Effective Date, and DD End are required.');
+    var expClose = document.getElementById('g-close') ? document.getElementById('g-close').value : '';
+    if (!buyer || !price || !psaDate || !ddEnd || !expClose) {
+      alert('Buyer, Price, PSA Effective Date, DD End, and Expected Closing Date are required.');
       return;
     }
     function gv(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
     gateData[dealId] = gateData[dealId] || {};
     gateData[dealId].undercontract = {
       buyer: buyer, price: price, psaDate: psaDate, ddEnd: ddEnd,
+      buyerContact: gv('g-buyer-contact') || null,
       expectedClosing: gv('g-close') || null,
       deposit1: gv('g-d1') || null, deposit1Due: gv('g-d1d') || null,
       deposit2: gv('g-d2') || null, deposit2Due: gv('g-d2d') || null,
@@ -3893,7 +3903,8 @@
       '<div class="field"><label class="field-label required">Fee Earned</label><input class="field-input" id="g-fe" placeholder="$480,000" /></div>' +
       '</div>' +
       '<div class="field-row">' +
-      '<div class="field"><label class="field-label required">Final Buyer</label><input class="field-input" id="g-fb" value="' + escapeHtml(prior.buyer || '') + '" /></div>' +
+      '<div class="field"><label class="field-label required">Buyer Company</label><input class="field-input" id="g-fb" value="' + escapeHtml(prior.buyer || '') + '" /></div>' +
+      '<div class="field"><label class="field-label">Buyer Contact Name</label><input class="field-input" id="g-fb-contact" value="' + escapeHtml(prior.buyerContact || '') + '" /></div>' +
       '<div class="field"><label class="field-label required">Seller</label><input class="field-input" id="g-sl" placeholder="Seller entity" /></div>' +
       '</div>' +
       '<div class="field"><label class="field-label">Co-brokers</label><input class="field-input" id="g-cb" placeholder="Firm + agent names, comma separated · blank if none" /></div>' +
@@ -3914,7 +3925,8 @@
     if (!fp || !fe || !fb || !sl) { alert('Price, Fee, Buyer, and Seller are required.'); return; }
     gateData[dealId] = gateData[dealId] || {};
     var cd = document.getElementById('g-cd') ? document.getElementById('g-cd').value : '';
-    gateData[dealId].closed = { finalPrice: fp, feeEarned: fe, finalBuyer: fb, seller: sl, closeDate: cd || null, buyer: fb };
+    var fbc = document.getElementById('g-fb-contact');
+    gateData[dealId].closed = { finalPrice: fp, feeEarned: fe, finalBuyer: fb, seller: sl, closeDate: cd || null, buyer: fb, buyerContact: (fbc && fbc.value.trim()) || null };
     window._modalCancel = null;
     document.getElementById('modal-backdrop').classList.remove('show');
     commitChange(dealId, dealName, 'closed', oldStatus, getSelectForDeal(dealId));
@@ -5295,9 +5307,13 @@
       if (!row) { alert('Save failed — check your connection and try again.'); return; }
       DEALS.push({ id: row.id, name: row.name, status: row.status, dealType: row.deal_type,
                    client: row.client, submarket: row.submarket, lead: row.lead,
-                   amount: row.amount, fee: row.fee, gateData: {} });
+                   amount: row.amount, fee: row.fee, gateData: {},
+                   address: null, assetDetails: {}, seller: {} });
       document.getElementById('modal-backdrop').classList.remove('show');
       renderDealRows();
+      if (['awarded', 'undercontract', 'closed', 'lost'].indexOf(row.status) >= 0) {
+        changeStatus(row.id, row.status, getSelectForDeal(row.id));
+      }
       var archived = (row.status === 'closed' || row.status === 'lost');
       showToast('Deal added', name + (archived ? ' is in your library.' : ' is in your pipeline — and in the database.'));
     });
@@ -5377,13 +5393,17 @@
         '<div style="border-top:1px solid var(--line-soft);margin:16px 0 12px;padding-top:12px;">' +
           '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);font-weight:700;margin-bottom:10px;">Client / seller contact</div>' +
           '<div class="field-row">' +
-            '<div class="field"><label class="field-label">Name</label>' +
-              '<input class="field-input" id="ed-client" value="' + escapeHtml(d.client || '') + '" /></div>' +
+            '<div class="field"><label class="field-label">Contact name</label>' +
+              '<input class="field-input" id="ed-seller-name" value="' + escapeHtml((d.seller && d.seller.name) || '') + '" placeholder="Person" /></div>' +
+            '<div class="field"><label class="field-label">Company</label>' +
+              '<input class="field-input" id="ed-client" value="' + escapeHtml(d.client || '') + '" placeholder="Entity / firm" /></div>' +
+          '</div>' +
+          '<div class="field-row">' +
             '<div class="field"><label class="field-label">Phone</label>' +
               '<input class="field-input" id="ed-seller-phone" value="' + escapeHtml((d.seller && d.seller.phone) || '') + '" /></div>' +
+            '<div class="field"><label class="field-label">Email</label>' +
+              '<input class="field-input" id="ed-seller-email" value="' + escapeHtml((d.seller && d.seller.email) || '') + '" /></div>' +
           '</div>' +
-          '<div class="field"><label class="field-label">Email</label>' +
-            '<input class="field-input" id="ed-seller-email" value="' + escapeHtml((d.seller && d.seller.email) || '') + '" /></div>' +
         '</div>' +
       '</div>' +
       '<div class="modal-footer">' +
@@ -5403,7 +5423,11 @@
     var name = document.getElementById('ed-name').value.trim();
     if (!name) { alert('Deal name is required.'); return; }
     d.name = name;
-    d.status = document.getElementById('ed-status').value;
+    var requestedStatus = document.getElementById('ed-status').value;
+    var GATED = ['awarded', 'undercontract', 'closed', 'lost', 'closing'];
+    var needsGate = requestedStatus !== d.status && GATED.indexOf(requestedStatus) >= 0;
+    // Gated moves go through the gate — the edit modal is not a back door around buyer/price capture
+    d.status = needsGate ? d.status : requestedStatus;
     d.dealType = document.getElementById('ed-type').value;
     d.client = document.getElementById('ed-client').value.trim() || null;
     d.submarket = document.getElementById('ed-submarket').value.trim() || null;
@@ -5416,7 +5440,7 @@
     var yearEl = document.getElementById('ed-year');
     d.assetDetails.yearBuilt = yearEl ? (yearEl.value.trim() || null) : (d.assetDetails.yearBuilt || null);
     d.seller = {
-      name: (d.seller && d.seller.name) || null,
+      name: document.getElementById('ed-seller-name').value.trim() || null,
       phone: document.getElementById('ed-seller-phone').value.trim() || null,
       email: document.getElementById('ed-seller-email').value.trim() || null
     };
@@ -5429,7 +5453,12 @@
     document.getElementById('modal-backdrop').classList.remove('show');
     renderDealRows();
     renderActionCenter();
-    showToast('Deal updated', name);
+    if (needsGate) {
+      // Field edits are saved; now the gate decides the status change
+      changeStatus(dealId, requestedStatus, getSelectForDeal(dealId));
+    } else {
+      showToast('Deal updated', name);
+    }
   };
 
   window.confirmDeleteDeal = function(dealId) {
@@ -5484,12 +5513,12 @@
     if (!sizeVal && importedUnits) sizeVal = importedUnits + ' (from import)';
 
     var seller = d.seller || {};
-    var sellerName = seller.name || d.client || '';
     var sellerBlock =
       '<div class="profile-section"><div class="profile-section-title">Client / seller contact</div>' +
-      (sellerName || seller.phone || seller.email
+      (seller.name || d.client || seller.phone || seller.email
         ? '<div class="profile-info-grid">' +
-            (sellerName ? '<div class="profile-info-item"><div class="profile-info-label">Name</div><div class="profile-info-value">' + escapeHtml(sellerName) + '</div></div>' : '') +
+            (seller.name ? '<div class="profile-info-item"><div class="profile-info-label">Contact name</div><div class="profile-info-value">' + escapeHtml(seller.name) + '</div></div>' : '') +
+            (d.client ? '<div class="profile-info-item"><div class="profile-info-label">Company</div><div class="profile-info-value">' + escapeHtml(d.client) + '</div></div>' : '') +
             (seller.phone ? '<div class="profile-info-item"><div class="profile-info-label">Phone</div><div class="profile-info-value"><a href="tel:' + seller.phone.replace(/\D/g, '') + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(seller.phone) + '</a></div></div>' : '') +
             (seller.email ? '<div class="profile-info-item"><div class="profile-info-label">Email</div><div class="profile-info-value"><a href="mailto:' + seller.email + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(seller.email) + '</a></div></div>' : '') +
           '</div>'
@@ -5610,7 +5639,8 @@
             return val ? '<div class="profile-info-item"><div class="profile-info-label">' + label + '</div><div class="profile-info-value">' + escapeHtml(val) + '</div></div>' : '';
           }
           var rows =
-            item('Buyer', cl.finalBuyer || uc.buyer || aw.buyer) +
+            item('Buyer company', cl.finalBuyer || uc.buyer || aw.buyer) +
+            item('Buyer contact', cl.buyerContact || uc.buyerContact || aw.buyerContact) +
             item('Purchase price', cl.finalPrice || uc.price || aw.price) +
             item('PSA effective', uc.psaDate) +
             item('DD period ends', uc.ddEnd) +
