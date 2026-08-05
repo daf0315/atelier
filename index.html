@@ -2804,6 +2804,44 @@
     .lib-row .lib-hide-sm { display: none; }
   }
 
+  .dp-columns {
+    display: grid;
+    grid-template-columns: 1.55fr 1fr;
+    gap: 0 28px;
+    align-items: start;
+  }
+  .dp-rail .profile-section:first-child { border-top: none; padding-top: 4px; }
+  .dp-map-frame {
+    width: 100%;
+    height: 210px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+  }
+  .dp-map-link {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--sunrise);
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .dp-map-link:hover { text-decoration: underline; }
+  .dp-map-empty {
+    height: 120px;
+    border: 1.5px dashed var(--line);
+    border-radius: var(--r-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-mute);
+    font-size: 11.5px;
+    text-align: center;
+    padding: 0 18px;
+  }
+  @media (max-width: 920px) {
+    .dp-columns { grid-template-columns: 1fr; }
+  }
+
   .toast {
     position: fixed;
     bottom: 30px;
@@ -3678,7 +3716,7 @@
       var g = dealRec.gateData || {};
       var gatePrice = null;
       if (newStatus === 'awarded' && g.awarded) gatePrice = _parseMoney(g.awarded.price);
-      if (newStatus === 'undercontract' && g.undercontract) gatePrice = _parseMoney(g.undercontract.price);
+      if ((newStatus === 'undercontract' || newStatus === 'closing') && g.undercontract) gatePrice = _parseMoney(g.undercontract.price);
       if (newStatus === 'closed' && g.closed) gatePrice = _parseMoney(g.closed.finalPrice || g.closed.price);
       var fields = { status: newStatus, gate_data: dealRec.gateData || {} };
       if (gatePrice !== null && gatePrice > 0) {
@@ -3707,8 +3745,12 @@
       if (row && targetSection && row.parentElement !== targetSection) {
         targetSection.appendChild(row);
       }
-      showToast(dealName + ' → ' + STATUS_LABELS[newStatus],
-                'Changed from ' + STATUS_LABELS[oldStatus] + ' — saved to your database.');
+      if (newStatus === oldStatus) {
+        showToast('Terms updated', dealName + ' — saved to your database.');
+      } else {
+        showToast(dealName + ' → ' + STATUS_LABELS[newStatus],
+                  'Changed from ' + STATUS_LABELS[oldStatus] + ' — saved to your database.');
+      }
     }
     recalculateSummary();
     renderNextActions();
@@ -3810,7 +3852,7 @@
       '<input class="field-input" id="g-price" placeholder="$48,000,000" />' +
       '<div class="field-help">Will be confirmed and editable at the Under Contract gate.</div></div>' +
       '</div>' +
-      gateFooter('Award deal', "saveAwarded('" + dealId + "','" + escapeJs(dealName) + "','" + oldStatus + "')");
+      gateFooter(newStatus === oldStatus ? 'Save terms' : 'Award deal', "saveAwarded('" + dealId + "','" + escapeJs(dealName) + "','" + oldStatus + "')");
     openModal(html, function() { revertSelect(selectEl, oldStatus); });
   }
 
@@ -3860,11 +3902,11 @@
       '<div class="field" style="margin:0;"><label class="field-label">Fee</label><input class="field-input" id="g-ef" placeholder="$50K" /></div>' +
       '</div></div>' +
       '</div>' +
-      gateFooter('Move to Under Contract', "saveUC('" + dealId + "','" + escapeJs(dealName) + "','" + oldStatus + "')");
+      gateFooter(newStatus === oldStatus ? 'Save terms' : 'Move to Under Contract', "saveUC('" + dealId + "','" + escapeJs(dealName) + "','" + oldStatus + "','" + newStatus + "')");
     openModal(html, function() { revertSelect(selectEl, oldStatus); });
   }
 
-  window.saveUC = function(dealId, dealName, oldStatus) {
+  window.saveUC = function(dealId, dealName, oldStatus, targetStatus) {
     var buyer = document.getElementById('g-buyer').value.trim();
     var price = document.getElementById('g-price').value.trim();
     var psaDate = document.getElementById('g-psa-date').value;
@@ -3886,7 +3928,7 @@
     };
     window._modalCancel = null;
     document.getElementById('modal-backdrop').classList.remove('show');
-    commitChange(dealId, dealName, 'undercontract', oldStatus, getSelectForDeal(dealId));
+    commitChange(dealId, dealName, targetStatus || 'undercontract', oldStatus, getSelectForDeal(dealId));
   };
 
   function openGateClosed(dealId, dealName, newStatus, oldStatus, selectEl) {
@@ -5515,14 +5557,12 @@
     var seller = d.seller || {};
     var sellerBlock =
       '<div class="profile-section"><div class="profile-section-title">Client / seller contact</div>' +
-      (seller.name || d.client || seller.phone || seller.email
-        ? '<div class="profile-info-grid">' +
-            (seller.name ? '<div class="profile-info-item"><div class="profile-info-label">Contact name</div><div class="profile-info-value">' + escapeHtml(seller.name) + '</div></div>' : '') +
-            (d.client ? '<div class="profile-info-item"><div class="profile-info-label">Company</div><div class="profile-info-value">' + escapeHtml(d.client) + '</div></div>' : '') +
-            (seller.phone ? '<div class="profile-info-item"><div class="profile-info-label">Phone</div><div class="profile-info-value"><a href="tel:' + seller.phone.replace(/\D/g, '') + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(seller.phone) + '</a></div></div>' : '') +
-            (seller.email ? '<div class="profile-info-item"><div class="profile-info-label">Email</div><div class="profile-info-value"><a href="mailto:' + seller.email + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(seller.email) + '</a></div></div>' : '') +
-          '</div>'
-        : '<div class="profile-info-value muted">No contact on file — use Edit to add phone and email.</div>') +
+      '<div class="profile-info-grid">' +
+        '<div class="profile-info-item"><div class="profile-info-label">Contact name</div><div class="profile-info-value">' + (seller.name ? escapeHtml(seller.name) : '<span class="muted">—</span>') + '</div></div>' +
+        '<div class="profile-info-item"><div class="profile-info-label">Company</div><div class="profile-info-value">' + (d.client ? escapeHtml(d.client) : '<span class="muted">—</span>') + '</div></div>' +
+        '<div class="profile-info-item"><div class="profile-info-label">Phone</div><div class="profile-info-value">' + (seller.phone ? '<a href="tel:' + seller.phone.replace(/\D/g, '') + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(seller.phone) + '</a>' : '<span class="muted">—</span>') + '</div></div>' +
+        '<div class="profile-info-item"><div class="profile-info-label">Email</div><div class="profile-info-value">' + (seller.email ? '<a href="mailto:' + seller.email + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(seller.email) + '</a>' : '<span class="muted">—</span>') + '</div></div>' +
+      '</div>' +
       '</div>';
 
     // Open + completed tasks
@@ -5627,6 +5667,7 @@
           })() +
           '<div class="company-overview-item"><div class="company-overview-label">Lead</div><div class="company-overview-value">' + escapeHtml(d.lead || 'DF') + '</div></div>' +
         '</div>' +
+        '<div class="dp-columns"><div class="dp-main">' +
         sellerBlock +
         (function() {
           var g = d.gateData || {};
@@ -5641,20 +5682,19 @@
           var rows =
             item('Buyer company', cl.finalBuyer || uc.buyer || aw.buyer) +
             item('Buyer contact', cl.buyerContact || uc.buyerContact || aw.buyerContact) +
-            item('Purchase price', cl.finalPrice || uc.price || aw.price) +
+            item('Purchase price', _fmtMoneyDisplay(cl.finalPrice || uc.price || aw.price)) +
             item('PSA effective', uc.psaDate) +
             item('DD period ends', uc.ddEnd) +
             item('Expected closing', uc.expectedClosing) +
-            item('Initial deposit', uc.deposit1 ? uc.deposit1 + (uc.deposit1Due ? ' · due ' + uc.deposit1Due : '') : '') +
-            item('Additional deposit', uc.deposit2 ? uc.deposit2 + (uc.deposit2Due ? ' · due ' + uc.deposit2Due : '') : '') +
+            item('Initial deposit', uc.deposit1 ? _fmtMoneyDisplay(uc.deposit1) + (uc.deposit1Due ? ' · due ' + uc.deposit1Due : '') : '') +
+            item('Additional deposit', uc.deposit2 ? _fmtMoneyDisplay(uc.deposit2) + (uc.deposit2Due ? ' · due ' + uc.deposit2Due : '') : '') +
             item('Extensions', uc.extCount ? uc.extCount + (uc.extLength ? ' × ' + uc.extLength : '') + (uc.extFee ? ' @ ' + uc.extFee : '') : '') +
             item('Closed date', cl.closeDate) +
-            item('Fee earned', cl.feeEarned) +
+            item('Fee earned', _fmtMoneyDisplay(cl.feeEarned)) +
             item('Seller of record', cl.seller);
           var updateBtn = '';
           if (d.status === 'awarded' || d.status === 'undercontract' || d.status === 'closing') {
-            var gateFn = d.status === 'awarded' ? 'openGateAwarded' : 'openGateUnderContract';
-            updateBtn = '<button class="btn" style="font-size:11px;margin-top:10px;" onclick="' + gateFn + '(\'' + d.id + '\', \'' + escapeJs(d.name) + '\', \'' + (d.status === 'awarded' ? 'awarded' : 'undercontract') + '\', \'' + d.status + '\', getSelectForDeal(\'' + d.id + '\'))">Update terms</button>';
+            updateBtn = '<button class="btn" style="font-size:11px;margin-top:10px;" onclick="updateDealTerms(\'' + d.id + '\')">Update terms</button>';
           }
           return '<div class="profile-section">' +
             '<div class="profile-section-title">Transaction</div>' +
@@ -5662,16 +5702,6 @@
             updateBtn +
           '</div>';
         })() +
-        '<div class="profile-section">' +
-          '<div class="profile-section-title">To-dos &amp; activity</div>' +
-          openHtml +
-          '<div class="dtd-add" style="margin-top:10px;">' +
-            '<input type="text" id="dp-title-' + dealId + '" placeholder="Add a to-do for this deal…" onkeydown="if(event.key===\'Enter\')quickAddDealTask(\'' + dealId + '\', \'dp\')" />' +
-            '<input type="date" id="dp-date-' + dealId + '" />' +
-            '<button onclick="quickAddDealTask(\'' + dealId + '\', \'dp\')">Add</button>' +
-          '</div>' +
-          (doneHtml ? '<div style="margin-top:14px;padding-top:10px;border-top:1px dashed var(--line);"><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);font-weight:700;margin-bottom:6px;">Completed</div>' + doneHtml + '</div>' : '') +
-        '</div>' +
         '<div class="profile-section">' +
           '<div class="profile-section-title">Deal notes</div>' +
           notesHtml +
@@ -5701,6 +5731,33 @@
             '</div>' +
             '<div class="log-form-actions"><button class="btn primary" onclick="saveMarketActivity(\'' + dealId + '\')">Log activity</button></div>' +
           '</div>' +
+        '</div>' +
+        '</div>' +
+        '<div class="dp-rail">' +
+          (function() {
+            var addr = (d.address || '').trim();
+            var mapInner;
+            if (addr) {
+              var q = encodeURIComponent(addr);
+              mapInner =
+                '<iframe class="dp-map-frame" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://maps.google.com/maps?q=' + q + '&t=k&z=17&output=embed"></iframe>' +
+                '<a class="dp-map-link" href="https://www.google.com/maps/search/?api=1&query=' + q + '" target="_blank" rel="noopener">Open in Google Maps ↗</a>';
+            } else {
+              mapInner = '<div class="dp-map-empty">Add an address via Edit and the property appears here on satellite.</div>';
+            }
+            return '<div class="profile-section"><div class="profile-section-title">Property</div>' + mapInner + '</div>';
+          })() +
+          '<div class="profile-section">' +
+            '<div class="profile-section-title">To-dos &amp; activity</div>' +
+            openHtml +
+            '<div class="dtd-add" style="margin-top:10px;">' +
+              '<input type="text" id="dp-title-' + dealId + '" placeholder="Add a to-do for this deal…" onkeydown="if(event.key===\'Enter\')quickAddDealTask(\'' + dealId + '\', \'dp\')" />' +
+              '<input type="date" id="dp-date-' + dealId + '" />' +
+              '<button onclick="quickAddDealTask(\'' + dealId + '\', \'dp\')">Add</button>' +
+            '</div>' +
+            (doneHtml ? '<div style="margin-top:14px;padding-top:10px;border-top:1px dashed var(--line);"><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);font-weight:700;margin-bottom:6px;">Completed</div>' + doneHtml + '</div>' : '') +
+          '</div>' +
+        '</div>' +
         '</div>' +
       '</div>';
   }
@@ -5774,6 +5831,17 @@
     }).join('');
   };
 
+  window.updateDealTerms = function(dealId) {
+    var d = DEALS.find(function(x) { return x.id === dealId; });
+    if (!d) return;
+    var sel = getSelectForDeal(dealId);
+    if (d.status === 'awarded') {
+      openGateAwarded(dealId, d.name, 'awarded', 'awarded', sel);
+    } else if (d.status === 'undercontract' || d.status === 'closing') {
+      openGateUnderContract(dealId, d.name, d.status, d.status, sel);
+    }
+  };
+
   window.changeStatusFromPage = function(dealId, newStatus, pageSelectEl) {
     var rowSelect = document.querySelector('.pipeline-row[data-id="' + dealId + '"] .row-status-select');
     if (rowSelect) {
@@ -5831,6 +5899,13 @@
     if (window._db && window._db.deleteMarketActivity) window._db.deleteMarketActivity(id);
     renderDealPage(dealId);
   };
+
+  function _fmtMoneyDisplay(v) {
+    // "$40M", "40000000", "$500K" → "$40,000,000"; unparseable strings (e.g. "TBD") pass through
+    var n = _parseMoney(v);
+    if (n === null || n <= 0) return v || '';
+    return '$' + Math.round(n).toLocaleString('en-US');
+  }
 
   function _parseMoney(s) {
     if (s === null || s === undefined) return null;
