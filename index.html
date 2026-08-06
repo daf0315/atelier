@@ -4548,7 +4548,8 @@
     }
 
     // Compact log button in header top-right (Edit 1)
-    var headerLogBtn = '<button class="profile-header-log" onclick="openLogForm(\'' + contactId + '\')">📝 Log</button>';
+    var headerLogBtn = '<button class="profile-header-log" onclick="openLogForm(\'' + contactId + '\')">📝 Log</button>' +
+      '<button class="profile-header-log" style="right:86px;" onclick="openEditContactModal(\'' + contactId + '\')">✎ Edit</button>';
 
     // Quick actions row (people only — call/text/email, NO log)
     var quickActions = '';
@@ -4984,10 +4985,15 @@
     var followUpBy = followUpEl ? followUpEl.value : '';
     if (!title) { alert('A short title is required.'); return; }
     _stopLiveTimer(contactId);
-    TIMELINE.unshift({ contactId: contactId, type: type, date: date, title: title, body: body });
+    var logEntry = { contactId: contactId, type: type, date: date, title: title, body: body };
+    TIMELINE.unshift(logEntry);
+    if (window._db && window._db.insertContactNote) {
+      window._db.insertContactNote(logEntry).then(function(row) { if (row) logEntry.id = row.id; });
+    }
     var contact = CONTACTS.find(function(c) { return c.id === contactId; });
     if (contact && contact.kind === 'person' && (!contact.lastContact || date > contact.lastContact)) {
       contact.lastContact = date;
+      if (window._db && window._db.updateContact) window._db.updateContact(contactId, { last_contact: date });
     }
     // Auto-create Owed response task if follow-up date was set
     if (followUpBy) {
@@ -5051,6 +5057,124 @@
     window._modalCancel = null;
   };
 
+  window.openEditContactModal = function(contactId) {
+    var c = CONTACTS.find(function(x) { return x.id === contactId; });
+    if (!c) return;
+    var isPerson = c.kind === 'person';
+    var ROLES = ['capital', 'developer', 'client', 'broker', 'attorney', 'jll', 'owner'];
+    var roleBoxes = ROLES.map(function(r) {
+      var checked = (c.roles || []).indexOf(r) >= 0 ? ' checked' : '';
+      return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 10px 6px 0;"><input type="checkbox" value="' + r + '"' + checked + ' /> ' + r + '</label>';
+    }).join('');
+    var firmOpts = '<option value="">— none —</option>' + CONTACTS.filter(function(x) { return x.kind === 'firm'; })
+      .map(function(f) { return '<option value="' + f.id + '"' + (c.firmId === f.id ? ' selected' : '') + '>' + escapeHtml(f.name) + '</option>'; }).join('');
+    var body;
+    if (isPerson) {
+      body =
+        '<div class="field"><label class="field-label required">Name</label><input class="field-input" id="ec-name" value="' + escapeHtml(c.name) + '" /></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">Title</label><input class="field-input" id="ec-title" value="' + escapeHtml(c.title || '') + '" /></div>' +
+          '<div class="field"><label class="field-label">Firm</label><select class="field-select" id="ec-firm">' + firmOpts + '</select></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">Phone</label><input class="field-input" id="ec-phone" value="' + escapeHtml(c.phone || '') + '" /></div>' +
+          '<div class="field"><label class="field-label">Email</label><input class="field-input" id="ec-email" value="' + escapeHtml(c.email || '') + '" /></div>' +
+        '</div>' +
+        '<div class="field"><label class="field-label">Roles</label><div id="ec-roles">' + roleBoxes + '</div></div>' +
+        '<div class="field"><label class="field-label">Notes</label><textarea class="field-input" id="ec-notes" style="min-height:60px;">' + escapeHtml(c.notes || '') + '</textarea></div>';
+    } else {
+      body =
+        '<div class="field"><label class="field-label required">Firm name</label><input class="field-input" id="ec-name" value="' + escapeHtml(c.name) + '" /></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">Firm type</label><input class="field-input" id="ec-firmtype" value="' + escapeHtml(c.firmType || '') + '" placeholder="e.g. Equity · Family Office" /></div>' +
+          '<div class="field"><label class="field-label">HQ</label><input class="field-input" id="ec-hq" value="' + escapeHtml(c.hq || '') + '" /></div>' +
+        '</div>' +
+        '<div class="field"><label class="field-label">Roles</label><div id="ec-roles">' + roleBoxes + '</div></div>' +
+        '<div class="field"><label class="field-label">Description / notes</label><textarea class="field-input" id="ec-notes" style="min-height:60px;">' + escapeHtml(c.notes || c.description || '') + '</textarea></div>';
+    }
+    var html =
+      '<div class="modal-header"><div class="modal-eyebrow">Edit ' + (isPerson ? 'person' : 'firm') + '</div>' +
+      '<div class="modal-title" style="font-size:20px;">' + escapeHtml(c.name) + '</div></div>' +
+      '<div class="modal-body">' + body + '</div>' +
+      '<div class="modal-footer">' +
+        '<div class="modal-footer-left"><button class="btn" style="color:var(--rose);border-color:var(--rose);" onclick="confirmDeleteContact(\'' + contactId + '\')">Delete</button></div>' +
+        '<div class="modal-footer-right">' +
+          '<button class="btn" onclick="closeModal()">Cancel</button>' +
+          '<button class="btn primary" onclick="saveEditContact(\'' + contactId + '\')">Save changes</button>' +
+        '</div></div>';
+    document.getElementById('modal').innerHTML = html;
+    document.getElementById('modal-backdrop').classList.add('show');
+    window._modalCancel = null;
+  };
+
+  window.saveEditContact = function(contactId) {
+    var c = CONTACTS.find(function(x) { return x.id === contactId; });
+    if (!c) return;
+    var name = document.getElementById('ec-name').value.trim();
+    if (!name) { alert('Name is required.'); return; }
+    var roles = [];
+    document.querySelectorAll('#ec-roles input[type=checkbox]:checked').forEach(function(cb) { roles.push(cb.value); });
+    c.name = name;
+    c.roles = roles;
+    c.notes = document.getElementById('ec-notes').value.trim();
+    var fields = { name: name, roles: roles, notes: c.notes || null };
+    if (c.kind === 'person') {
+      c.title = document.getElementById('ec-title').value.trim();
+      var oldFirmId = c.firmId;
+      c.firmId = document.getElementById('ec-firm').value || null;
+      c.phone = document.getElementById('ec-phone').value.trim();
+      c.email = document.getElementById('ec-email').value.trim();
+      fields.title = c.title || null;
+      fields.firm_id = c.firmId;
+      fields.phone = c.phone || null;
+      fields.email = c.email || null;
+      if (oldFirmId !== c.firmId) {
+        CONTACTS.forEach(function(f) {
+          if (f.kind !== 'firm' || !f.linkedContacts) return;
+          var ix = f.linkedContacts.indexOf(contactId);
+          if (f.id === oldFirmId && ix >= 0) f.linkedContacts.splice(ix, 1);
+          if (f.id === c.firmId && ix < 0) f.linkedContacts.push(contactId);
+        });
+      }
+    } else {
+      c.firmType = document.getElementById('ec-firmtype').value.trim();
+      c.hq = document.getElementById('ec-hq').value.trim();
+      c.description = c.notes;
+      fields.firm_type = c.firmType || null;
+      fields.hq = c.hq || null;
+    }
+    if (window._db && window._db.updateContact) window._db.updateContact(contactId, fields);
+    document.getElementById('modal-backdrop').classList.remove('show');
+    renderContactsList();
+    renderContactProfile(contactId);
+    showToast('Contact updated', name);
+  };
+
+  window.confirmDeleteContact = function(contactId) {
+    var c = CONTACTS.find(function(x) { return x.id === contactId; });
+    if (!c) return;
+    if (!confirm('Delete "' + c.name + '" permanently?\n\nTheir log entries are removed; tasks and market activity lose the link but keep their text. This cannot be undone.')) return;
+    TASKS.forEach(function(t) { if (t.contactId === contactId) t.contactId = null; });
+    for (var i = TIMELINE.length - 1; i >= 0; i--) if (TIMELINE[i].contactId === contactId) TIMELINE.splice(i, 1);
+    MARKET_ACTIVITY.forEach(function(m) { if (m.contactId === contactId) m.contactId = null; });
+    CONTACTS.forEach(function(p) { if (p.kind === 'person' && p.firmId === contactId) p.firmId = null; });
+    CONTACTS.forEach(function(f) {
+      if (f.kind === 'firm' && f.linkedContacts) {
+        var ix = f.linkedContacts.indexOf(contactId);
+        if (ix >= 0) f.linkedContacts.splice(ix, 1);
+      }
+    });
+    var idx = CONTACTS.findIndex(function(x) { return x.id === contactId; });
+    if (idx >= 0) CONTACTS.splice(idx, 1);
+    if (window._db && window._db.deleteContact) window._db.deleteContact(contactId);
+    document.getElementById('modal-backdrop').classList.remove('show');
+    selectedContactId = null;
+    renderContactsList();
+    var prof = document.getElementById('contacts-profile');
+    if (prof) prof.innerHTML = '<div style="padding:40px;text-align:center;color:var(--ink-mute);font-size:12.5px;">Select a contact from the list.</div>';
+    showToast('Contact deleted', c.name + ' removed.');
+  };
+
   window.saveNewContact = function(kind) {
     var isPerson = kind === 'person';
     var name = document.getElementById('nc-name').value.trim();
@@ -5090,6 +5214,25 @@
       };
     }
     CONTACTS.push(record);
+    if (window._db && window._db.insertContact) {
+      window._db.insertContact(record).then(function(row) {
+        if (!row) return;
+        var oldId = record.id;
+        record.id = row.id;
+        // repoint firm linkage that used the temp id
+        CONTACTS.forEach(function(c) {
+          if (c.kind === 'firm' && c.linkedContacts) {
+            var ix = c.linkedContacts.indexOf(oldId);
+            if (ix >= 0) c.linkedContacts[ix] = row.id;
+          }
+          if (c.kind === 'person' && c.firmId === oldId) {
+            c.firmId = row.id;
+            if (window._db.updateContact) window._db.updateContact(c.id, { firm_id: row.id });
+          }
+        });
+        renderContactsList();
+      });
+    }
     document.getElementById('modal-backdrop').classList.remove('show');
     renderContactsList();
     selectContact(id);
@@ -5259,7 +5402,7 @@
   }
 
   // Called by the auth layer after login with rows from the database
-  window.atelierHydrate = function(dbDeals, dbTasks, dbDealNotes, dbHistory) {
+  window.atelierHydrate = function(dbDeals, dbTasks, dbTimeline, dbHistory, dbContacts) {
     DEALS = (dbDeals || []).map(function(r) {
       return { id: r.id, name: r.name, status: r.status, dealType: r.deal_type,
                client: r.client, submarket: r.submarket, lead: r.lead,
@@ -5274,12 +5417,44 @@
                followUpBy: r.follow_up_by, createdOn: (r.created_at || '').slice(0, 10),
                done: r.done, completedOn: r.completed_on, completionNote: r.completion_note };
     });
-    DEAL_NOTES = (dbDealNotes || []).map(function(r) {
+    var tl = dbTimeline || [];
+    DEAL_NOTES = tl.filter(function(r) { return r.deal_id; }).map(function(r) {
       return { id: r.id, dealId: r.deal_id, type: r.type, date: r.date, body: r.body || r.title };
+    });
+    TIMELINE = tl.filter(function(r) { return r.contact_id; }).map(function(r) {
+      return { id: r.id, contactId: r.contact_id, type: r.type, date: r.date, title: r.title, body: r.body || '' };
     });
     MARKET_ACTIVITY = (dbHistory || []).map(function(r) {
       return { id: r.id, dealId: r.deal_id, investor: r.investor_name || '', contactId: r.contact_id,
                dateShown: r.date_shown, outcome: r.outcome, amount: r.amount || '', comment: r.comment || '' };
+    });
+    // Contacts: DB rows → app shapes; firms' linkedContacts rebuilt from people's firm_id
+    CONTACTS = (dbContacts || []).map(function(r) {
+      if (r.kind === 'person') {
+        return { id: r.id, kind: 'person', name: r.name, title: r.title || '', focus: r.focus || '',
+                 office: r.office || '', firmId: r.firm_id || null, phone: r.phone || '',
+                 directPhone: r.direct_phone || '', email: r.email || '',
+                 lastContact: r.last_contact || '', personal: r.personal || null,
+                 roles: r.roles || [], notes: r.notes || '',
+                 relationshipStrength: r.relationship_strength || '' };
+      }
+      return { id: r.id, kind: 'firm', name: r.name, firmType: r.firm_type || '', hq: r.hq || '',
+               website: r.website || '', offices: r.offices || [], founded: r.founded || null,
+               aum: r.aum || '', criteria: r.criteria || null, roles: r.roles || [],
+               notes: r.notes || '', description: r.notes || '',
+               relationshipStrength: r.relationship_strength || '', linkedContacts: [] };
+    });
+    CONTACTS.forEach(function(c) {
+      if (c.kind === 'person' && c.firmId) {
+        var f = CONTACTS.find(function(x) { return x.id === c.firmId; });
+        if (f) { f.linkedContacts = f.linkedContacts || []; f.linkedContacts.push(c.id); }
+      }
+    });
+    // Contact-side deal history view (linked market activity only; linking arrives with pickers)
+    DEAL_HISTORY = MARKET_ACTIVITY.filter(function(m) { return m.contactId; }).map(function(m) {
+      var deal = DEALS.find(function(x) { return x.id === m.dealId; });
+      return { contactIds: [m.contactId], dealName: (deal ? deal.name : m.investor),
+               dateShown: m.dateShown, outcome: m.outcome, amount: m.amount, comment: m.comment };
     });
     // rebuild gate cache from DB
     Object.keys(gateData).forEach(function(k) { delete gateData[k]; });
@@ -6520,6 +6695,43 @@ window._db = {
   deleteMarketActivity: async function(id) {
     var res = await sb.from('deal_history').delete().eq('id', id);
     if (res.error) console.error('deleteMarketActivity', res.error);
+  },
+  insertContact: async function(c) {
+    var payload = { kind: c.kind, name: c.name, roles: c.roles || [], notes: c.notes || null };
+    if (c.kind === 'person') {
+      payload.title = c.title || null;
+      payload.firm_id = c.firmId || null;
+      payload.phone = c.phone || null;
+      payload.email = c.email || null;
+      payload.last_contact = c.lastContact || null;
+    } else {
+      payload.firm_type = c.firmType || null;
+      payload.hq = c.hq || null;
+      payload.relationship_strength = c.relationshipStrength || null;
+    }
+    var res = await sb.from('contacts').insert(payload).select().single();
+    if (res.error) { console.error('insertContact', res.error); return null; }
+    return res.data;
+  },
+  updateContact: async function(id, fields) {
+    var res = await sb.from('contacts').update(fields).eq('id', id);
+    if (res.error) console.error('updateContact', res.error);
+  },
+  deleteContact: async function(id) {
+    await sb.from('tasks').update({ contact_id: null }).eq('contact_id', id);
+    await sb.from('timeline').delete().eq('contact_id', id);
+    await sb.from('deal_history').update({ contact_id: null }).eq('contact_id', id);
+    await sb.from('contacts').update({ firm_id: null }).eq('firm_id', id);
+    var res = await sb.from('contacts').delete().eq('id', id);
+    if (res.error) console.error('deleteContact', res.error);
+  },
+  insertContactNote: async function(n) {
+    var res = await sb.from('timeline').insert({
+      contact_id: n.contactId, type: n.type, date: n.date,
+      title: n.title, body: n.body || null
+    }).select().single();
+    if (res.error) { console.error('insertContactNote', res.error); return null; }
+    return res.data;
   }
 };
 
@@ -6530,19 +6742,24 @@ async function hydrateFromDb() {
     console.error('hydrate failed', dealsRes.error, tasksRes.error);
     return;
   }
-  // Deal notes + market activity: tolerate a not-yet-migrated database
-  var notesData = [], historyData = [];
+  // Timeline (deal notes + contact log), market activity, contacts
+  var timelineData = [], historyData = [], contactsData = [];
   try {
-    var notesRes = await sb.from('timeline').select('*').not('deal_id', 'is', null).order('date', { ascending: false });
-    if (!notesRes.error) notesData = notesRes.data;
-    else console.error('deal notes fetch (run migration 2?):', notesRes.error.message);
-  } catch (e) { console.error('deal notes fetch failed', e); }
+    var tlRes = await sb.from('timeline').select('*').order('date', { ascending: false });
+    if (!tlRes.error) timelineData = tlRes.data;
+    else console.error('timeline fetch:', tlRes.error.message);
+  } catch (e) { console.error('timeline fetch failed', e); }
   try {
     var histRes = await sb.from('deal_history').select('*').order('date_shown', { ascending: false });
     if (!histRes.error) historyData = histRes.data;
-    else console.error('market activity fetch (run migration 2?):', histRes.error.message);
+    else console.error('market activity fetch:', histRes.error.message);
   } catch (e) { console.error('market activity fetch failed', e); }
-  if (window.atelierHydrate) window.atelierHydrate(dealsRes.data, tasksRes.data, notesData, historyData);
+  try {
+    var cRes = await sb.from('contacts').select('*').order('name');
+    if (!cRes.error) contactsData = cRes.data;
+    else console.error('contacts fetch:', cRes.error.message);
+  } catch (e) { console.error('contacts fetch failed', e); }
+  if (window.atelierHydrate) window.atelierHydrate(dealsRes.data, tasksRes.data, timelineData, historyData, contactsData);
 }
 
 sb.auth.onAuthStateChange(function(event, session) {
