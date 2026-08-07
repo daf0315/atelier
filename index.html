@@ -2844,13 +2844,17 @@
     .dp-columns { grid-template-columns: 1fr; }
   }
 
+  .pipeline-summary { display: flex; align-items: center; }
+  .pipeline-summary-stats { display: flex; gap: 56px; align-items: center; }
+
   .pipe-analytics {
     display: grid;
-    grid-template-columns: 1fr 1.15fr;
+    grid-template-columns: 1fr 1fr 1.25fr;
     gap: 16px;
     margin-bottom: 18px;
+    align-items: stretch;
   }
-  .pa-left { display: flex; flex-direction: column; gap: 14px; }
+  .pa-map-card { padding: 10px; display: flex; flex-direction: column; grid-row: span 1; }
   .pa-card {
     background: white;
     border: 1px solid var(--line);
@@ -2888,15 +2892,23 @@
   .pa-bar-label { font-size: 9px; color: var(--ink-mute); }
   .pa-bar-val { font-size: 9px; font-weight: 700; color: var(--ink-soft); }
   #pipe-map {
-    height: 100%;
-    min-height: 380px;
+    flex: 1;
+    min-height: 300px;
     border: 1px solid var(--line);
     border-radius: var(--r-md);
   }
+  .pa-pie-wrap, .pa-bars { min-height: 230px; }
+  .pa-pie-wrap { align-items: center; }
+  .pa-bars { height: 230px; align-items: flex-end; }
   .pa-map-note { font-size: 10.5px; color: var(--ink-mute); margin-top: 6px; }
   .pa-map-note a { color: var(--sunrise); cursor: pointer; }
-  @media (max-width: 920px) {
+  @media (max-width: 1100px) {
+    .pipe-analytics { grid-template-columns: 1fr 1fr; }
+    .pa-map-card { grid-column: 1 / -1; }
+  }
+  @media (max-width: 700px) {
     .pipe-analytics { grid-template-columns: 1fr; }
+    .pa-map-card { grid-column: auto; }
     #pipe-map { min-height: 280px; }
   }
 
@@ -3174,27 +3186,6 @@
           <div>
             <div class="ps-stat-num" id="pt-total">—</div>
             <div class="ps-stat-label">Total deal value</div>
-
-      <div class="pipe-analytics">
-        <div class="pa-left">
-          <div class="pa-card">
-            <div class="pa-card-title">Deals by status</div>
-            <div class="pa-pie-wrap">
-              <div class="pa-pie" id="pa-pie"></div>
-              <div class="pa-legend" id="pa-legend"></div>
-            </div>
-          </div>
-          <div class="pa-card">
-            <div class="pa-card-title">Projected fees by expected closing</div>
-            <div class="pa-bars" id="pa-bars"></div>
-          </div>
-        </div>
-        <div class="pa-card" style="padding:10px;display:flex;flex-direction:column;">
-          <div class="pa-card-title" style="padding:4px 6px 0;">Deal map</div>
-          <div id="pipe-map"></div>
-          <div class="pa-map-note" id="pa-map-note"></div>
-        </div>
-      </div>
           </div>
           <div>
             <div class="ps-stat-num gold" id="pt-fees">—</div>
@@ -3204,6 +3195,25 @@
             <div class="ps-stat-num moss" id="pt-count">—</div>
             <div class="ps-stat-label">Active deals</div>
           </div>
+        </div>
+      </div>
+
+      <div class="pipe-analytics">
+        <div class="pa-card">
+          <div class="pa-card-title">Deals by status</div>
+          <div class="pa-pie-wrap">
+            <div class="pa-pie" id="pa-pie"></div>
+            <div class="pa-legend" id="pa-legend"></div>
+          </div>
+        </div>
+        <div class="pa-card">
+          <div class="pa-card-title">Projected fees by expected closing</div>
+          <div class="pa-bars" id="pa-bars"></div>
+        </div>
+        <div class="pa-card pa-map-card">
+          <div class="pa-card-title" style="padding:4px 6px 0;">Deal map</div>
+          <div id="pipe-map"></div>
+          <div class="pa-map-note" id="pa-map-note"></div>
         </div>
       </div>
 
@@ -5503,7 +5513,9 @@
         stops.push(col + ' ' + from.toFixed(1) + 'deg ' + to.toFixed(1) + 'deg');
         legendHtml += '<div><span class="pa-legend-dot" style="background:' + col + '"></span>' + o[1] + ' · ' + counts[s] + '</div>';
       });
-      pie.style.background = stops.length ? 'conic-gradient(' + stops.join(', ') + ')' : 'var(--cream-deep)';
+      var solo = null;
+      if (stops.length === 1) { solo = stops[0].split(' ')[0]; }
+      pie.style.background = solo ? solo : (stops.length ? 'conic-gradient(' + stops.join(', ') + ')' : 'var(--cream-deep)');
       legend.innerHTML = legendHtml || '<div style="color:var(--ink-mute);">No active deals yet.</div>';
     }
 
@@ -5579,12 +5591,22 @@
     }
     if (note) {
       note.innerHTML = located.length + ' of ' + active.length + ' deals mapped' +
-        (unlocated ? ' · <a onclick="geocodeDeals()">Locate ' + unlocated + ' deal' + (unlocated === 1 ? '' : 's') + ' from addresses</a>' : '');
+        (unlocated ? ' · <a onclick="geocodeDeals()">Locate ' + unlocated + ' deal' + (unlocated === 1 ? '' : 's') + ' from addresses</a>' : '') +
+        ' · <a onclick="geocodeDeals(true)" title="Redo all address lookups, Florida-bounded. Typed coordinates are never changed.">Re-check pin locations</a>';
     }
   }
 
-  window.geocodeDeals = function() {
+  window.geocodeDeals = function(force) {
     var active = DEALS.filter(function(d) { return d.status !== 'closed' && d.status !== 'lost'; });
+    if (force) {
+      // wipe stored lookups for street-address deals (typed coordinates are never touched) and redo them Florida-bounded
+      active.forEach(function(d) {
+        var coordTyped = /^\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/.test(d.address || '');
+        if (!coordTyped && d.assetDetails && d.assetDetails.geo) {
+          delete d.assetDetails.geo;
+        }
+      });
+    }
     var targets = active.filter(function(d) { return !_dealLatLng(d) && d.address; });
     var noAddr = active.filter(function(d) { return !_dealLatLng(d) && !d.address; }).length;
     if (!targets.length) {
@@ -5601,7 +5623,8 @@
       }
       var d = targets[i];
       if (note) note.textContent = 'Locating ' + (i + 1) + ' of ' + targets.length + ': ' + d.name + '…';
-      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(d.address))
+      var q = d.address + (/(fl|florida)/i.test(d.address) ? '' : ', Florida');
+      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox=-83.0,24.5,-79.5,28.5&bounded=1&q=' + encodeURIComponent(q))
         .then(function(r) { return r.json(); })
         .then(function(res) {
           if (res && res[0]) {
