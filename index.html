@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Atelier — Danielle Fernandez</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root {
     --cream: #FBF7F2;
@@ -2842,6 +2844,62 @@
     .dp-columns { grid-template-columns: 1fr; }
   }
 
+  .pipe-analytics {
+    display: grid;
+    grid-template-columns: 1fr 1.15fr;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .pa-left { display: flex; flex-direction: column; gap: 14px; }
+  .pa-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 14px 16px;
+  }
+  .pa-card-title {
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .pa-pie-wrap { display: flex; align-items: center; gap: 16px; }
+  .pa-pie {
+    width: 110px; height: 110px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid var(--line);
+  }
+  .pa-legend { font-size: 11px; line-height: 1.9; }
+  .pa-legend-dot {
+    display: inline-block; width: 9px; height: 9px; border-radius: 3px;
+    margin-right: 6px; vertical-align: middle;
+  }
+  .pa-bars { display: flex; align-items: flex-end; gap: 8px; height: 110px; padding-top: 4px; }
+  .pa-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+  .pa-bar {
+    width: 100%;
+    background: var(--gold);
+    border-radius: 4px 4px 0 0;
+    min-height: 2px;
+  }
+  .pa-bar-label { font-size: 9px; color: var(--ink-mute); }
+  .pa-bar-val { font-size: 9px; font-weight: 700; color: var(--ink-soft); }
+  #pipe-map {
+    height: 100%;
+    min-height: 380px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+  }
+  .pa-map-note { font-size: 10.5px; color: var(--ink-mute); margin-top: 6px; }
+  .pa-map-note a { color: var(--sunrise); cursor: pointer; }
+  @media (max-width: 920px) {
+    .pipe-analytics { grid-template-columns: 1fr; }
+    #pipe-map { min-height: 280px; }
+  }
+
   .toast {
     position: fixed;
     bottom: 30px;
@@ -3116,6 +3174,27 @@
           <div>
             <div class="ps-stat-num" id="pt-total">—</div>
             <div class="ps-stat-label">Total deal value</div>
+
+      <div class="pipe-analytics">
+        <div class="pa-left">
+          <div class="pa-card">
+            <div class="pa-card-title">Deals by status</div>
+            <div class="pa-pie-wrap">
+              <div class="pa-pie" id="pa-pie"></div>
+              <div class="pa-legend" id="pa-legend"></div>
+            </div>
+          </div>
+          <div class="pa-card">
+            <div class="pa-card-title">Projected fees by expected closing</div>
+            <div class="pa-bars" id="pa-bars"></div>
+          </div>
+        </div>
+        <div class="pa-card" style="padding:10px;display:flex;flex-direction:column;">
+          <div class="pa-card-title" style="padding:4px 6px 0;">Deal map</div>
+          <div id="pipe-map"></div>
+          <div class="pa-map-note" id="pa-map-note"></div>
+        </div>
+      </div>
           </div>
           <div>
             <div class="ps-stat-num gold" id="pt-fees">—</div>
@@ -4421,7 +4500,13 @@
     var target = document.getElementById('work-tab-' + tab);
     if (target) target.style.display = 'block';
     if (tab === 'contacts') renderContactsList();
-    if (tab === 'pipeline') { recalculateSummary(); renderNextActions(); }
+    if (tab === 'pipeline') {
+      recalculateSummary(); renderNextActions();
+      setTimeout(function() {
+        renderPipelineAnalytics();
+        if (_pipeMap) _pipeMap.invalidateSize();
+      }, 60);
+    }
     if (tab === 'library') renderLibrary();
     window.scrollTo(0, 0);
   };
@@ -5379,6 +5464,159 @@
     }
   }
 
+  /* ══════════ PIPELINE ANALYTICS ══════════ */
+  var STATUS_COLORS = {
+    prospecting: '#7FA8C9', preparing: '#C9BFA8', submitted: '#8FB3C9',
+    premarket: '#C9A87F', onmarket: '#F26B3A', offmarket: '#A88FC9',
+    awarded: '#C89B3C', undercontract: '#2F7A4F', closing: '#5A9E76'
+  };
+
+  function _dealLatLng(d) {
+    // coordinates typed straight into the address field: "25.7907, -80.1300"
+    var m = /^\s*(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/.exec(d.address || '');
+    if (m) return [parseFloat(m[1]), parseFloat(m[2])];
+    if (d.assetDetails && d.assetDetails.geo && d.assetDetails.geo.lat) {
+      return [d.assetDetails.geo.lat, d.assetDetails.geo.lng];
+    }
+    return null;
+  }
+
+  window.renderPipelineAnalytics = function() {
+    var active = DEALS.filter(function(d) { return d.status !== 'closed' && d.status !== 'lost'; });
+
+    // ── Pie: deals by status ──
+    var pie = document.getElementById('pa-pie');
+    var legend = document.getElementById('pa-legend');
+    if (pie && legend) {
+      var counts = {};
+      STATUS_OPTIONS.forEach(function(o) { counts[o[0]] = 0; });
+      active.forEach(function(d) { if (counts[d.status] !== undefined) counts[d.status]++; });
+      var total = active.length || 1;
+      var stops = [], acc = 0, legendHtml = '';
+      STATUS_OPTIONS.forEach(function(o) {
+        var s = o[0];
+        if (s === 'closed' || s === 'lost' || !counts[s]) return;
+        var from = acc / total * 360;
+        acc += counts[s];
+        var to = acc / total * 360;
+        var col = STATUS_COLORS[s] || '#999';
+        stops.push(col + ' ' + from.toFixed(1) + 'deg ' + to.toFixed(1) + 'deg');
+        legendHtml += '<div><span class="pa-legend-dot" style="background:' + col + '"></span>' + o[1] + ' · ' + counts[s] + '</div>';
+      });
+      pie.style.background = stops.length ? 'conic-gradient(' + stops.join(', ') + ')' : 'var(--cream-deep)';
+      legend.innerHTML = legendHtml || '<div style="color:var(--ink-mute);">No active deals yet.</div>';
+    }
+
+    // ── Bars: projected fees by expected closing month (next 6 with data) ──
+    var bars = document.getElementById('pa-bars');
+    if (bars) {
+      var byMonth = {};
+      active.forEach(function(d) {
+        var g = d.gateData || {};
+        var closeStr = (g.undercontract && g.undercontract.expectedClosing) ||
+                       (g.imported && g.imported.projectedClosing) || null;
+        if (!closeStr) return;
+        var mo = String(closeStr).slice(0, 7); // YYYY-MM
+        if (!/^\d{4}-\d{2}$/.test(mo)) return;
+        byMonth[mo] = (byMonth[mo] || 0) + (Number(d.fee) || 0);
+      });
+      var months = Object.keys(byMonth).sort().slice(0, 6);
+      if (!months.length) {
+        bars.innerHTML = '<div style="color:var(--ink-mute);font-size:11px;align-self:center;">Expected closing dates from your gates appear here as fees on a timeline.</div>';
+      } else {
+        var max = Math.max.apply(null, months.map(function(m) { return byMonth[m]; })) || 1;
+        var MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        bars.innerHTML = months.map(function(m) {
+          var h = Math.max(4, Math.round(byMonth[m] / max * 78));
+          var label = MO[parseInt(m.slice(5), 10) - 1] + ' ' + m.slice(2, 4);
+          return '<div class="pa-bar-col">' +
+            '<div class="pa-bar-val">' + fmtMoney(byMonth[m]) + '</div>' +
+            '<div class="pa-bar" style="height:' + h + 'px;"></div>' +
+            '<div class="pa-bar-label">' + label + '</div>' +
+          '</div>';
+        }).join('');
+      }
+    }
+
+    renderPipeMap(active);
+  };
+
+  var _pipeMap = null, _pipeMarkers = [];
+  function renderPipeMap(active) {
+    var el = document.getElementById('pipe-map');
+    var note = document.getElementById('pa-map-note');
+    if (!el) return;
+    if (typeof L === 'undefined') {
+      el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--ink-mute);font-size:12px;">Map library unavailable — check connection.</div>';
+      return;
+    }
+    if (!_pipeMap) {
+      _pipeMap = L.map(el, { scrollWheelZoom: false }).setView([26.1, -80.4], 8);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+      }).addTo(_pipeMap);
+    }
+    _pipeMarkers.forEach(function(m) { _pipeMap.removeLayer(m); });
+    _pipeMarkers = [];
+    var located = [], unlocated = 0;
+    active.forEach(function(d) {
+      var ll = _dealLatLng(d);
+      if (!ll) { unlocated++; return; }
+      located.push(ll);
+      var mk = L.circleMarker(ll, {
+        radius: 8, weight: 2, color: '#fff',
+        fillColor: STATUS_COLORS[d.status] || '#F26B3A', fillOpacity: 0.92
+      }).addTo(_pipeMap);
+      mk.bindPopup(
+        '<div style="font-family:Georgia,serif;font-size:13px;font-weight:600;margin-bottom:2px;">' + escapeHtml(d.name) + '</div>' +
+        '<div style="font-size:11px;color:#666;">' + (STATUS_LABELS[d.status] || d.status) + (d.amount ? ' · ' + fmtMoney(d.amount) : '') + '</div>' +
+        '<div style="font-size:11px;margin-top:5px;"><a href="#" onclick="openDealPage(\'' + d.id + '\');return false;" style="color:#F26B3A;">Open deal page →</a></div>'
+      );
+      _pipeMarkers.push(mk);
+    });
+    if (located.length) {
+      _pipeMap.fitBounds(L.latLngBounds(located).pad(0.25));
+    }
+    if (note) {
+      note.innerHTML = located.length + ' of ' + active.length + ' deals mapped' +
+        (unlocated ? ' · <a onclick="geocodeDeals()">Locate ' + unlocated + ' deal' + (unlocated === 1 ? '' : 's') + ' from addresses</a>' : '');
+    }
+  }
+
+  window.geocodeDeals = function() {
+    var active = DEALS.filter(function(d) { return d.status !== 'closed' && d.status !== 'lost'; });
+    var targets = active.filter(function(d) { return !_dealLatLng(d) && d.address; });
+    var noAddr = active.filter(function(d) { return !_dealLatLng(d) && !d.address; }).length;
+    if (!targets.length) {
+      alert(noAddr ? noAddr + ' unmapped deals have no address yet — add addresses (or paste coordinates) via the pencil edit, then run this again.' : 'Everything with an address is already mapped.');
+      return;
+    }
+    var note = document.getElementById('pa-map-note');
+    var done = 0;
+    function next(i) {
+      if (i >= targets.length) {
+        if (note) note.textContent = 'Located ' + done + ' of ' + targets.length + ' — addresses the lookup couldn\'t place need coordinates pasted into their address field.';
+        renderPipelineAnalytics();
+        return;
+      }
+      var d = targets[i];
+      if (note) note.textContent = 'Locating ' + (i + 1) + ' of ' + targets.length + ': ' + d.name + '…';
+      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(d.address))
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+          if (res && res[0]) {
+            d.assetDetails = d.assetDetails || {};
+            d.assetDetails.geo = { lat: parseFloat(res[0].lat), lng: parseFloat(res[0].lon) };
+            persistDeal(d.id, { asset_details: d.assetDetails });
+            done++;
+          }
+        })
+        .catch(function() {})
+        .then(function() { setTimeout(function() { next(i + 1); }, 1150); });
+    }
+    next(0);
+  };
+
   function updateSummaryBar() {
     var active = DEALS.filter(function(d) { return d.status !== 'closed' && d.status !== 'lost'; });
     var total = 0, fees = 0;
@@ -5393,6 +5631,7 @@
     if (pc) pc.textContent = active.length + (active.length === 1 ? ' deal' : ' deals');
     var qsp = document.getElementById('qs-pipeline');
     if (qsp) qsp.textContent = fmtMoney(total);
+    try { renderPipelineAnalytics(); } catch (e) { console.error('analytics', e); }
     var ptT = document.getElementById('pt-total');
     var ptF = document.getElementById('pt-fees');
     var ptC = document.getElementById('pt-count');
