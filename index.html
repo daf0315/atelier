@@ -2849,7 +2849,7 @@
 
   .pipe-analytics {
     display: grid;
-    grid-template-columns: 1fr 1fr 1.25fr;
+    grid-template-columns: 1fr 1.5fr;
     gap: 16px;
     margin-bottom: 18px;
     align-items: stretch;
@@ -2871,12 +2871,12 @@
   }
   .pa-pie-wrap { display: flex; align-items: center; gap: 16px; }
   .pa-pie {
-    width: 110px; height: 110px;
+    width: 200px; height: 200px;
     border-radius: 50%;
     flex-shrink: 0;
     border: 1px solid var(--line);
   }
-  .pa-legend { font-size: 11px; line-height: 1.9; }
+  .pa-legend { font-size: 12.5px; line-height: 2.2; }
   .pa-legend-dot {
     display: inline-block; width: 9px; height: 9px; border-radius: 3px;
     margin-right: 6px; vertical-align: middle;
@@ -2897,9 +2897,7 @@
     border: 1px solid var(--line);
     border-radius: var(--r-md);
   }
-  .pa-pie-wrap, .pa-bars { min-height: 230px; }
-  .pa-pie-wrap { align-items: center; }
-  .pa-bars { height: 230px; align-items: flex-end; }
+  .pa-pie-wrap { min-height: 260px; align-items: center; justify-content: center; gap: 26px; }
   .pa-map-note { font-size: 10.5px; color: var(--ink-mute); margin-top: 6px; }
   .pa-map-note a { color: var(--sunrise); cursor: pointer; }
   @media (max-width: 1100px) {
@@ -3205,10 +3203,6 @@
             <div class="pa-pie" id="pa-pie"></div>
             <div class="pa-legend" id="pa-legend"></div>
           </div>
-        </div>
-        <div class="pa-card">
-          <div class="pa-card-title">Projected fees by expected closing</div>
-          <div class="pa-bars" id="pa-bars"></div>
         </div>
         <div class="pa-card pa-map-card">
           <div class="pa-card-title" style="padding:4px 6px 0;">Deal map</div>
@@ -5475,11 +5469,18 @@
   }
 
   /* ══════════ PIPELINE ANALYTICS ══════════ */
-  var STATUS_COLORS = {
-    prospecting: '#7FA8C9', preparing: '#C9BFA8', submitted: '#8FB3C9',
-    premarket: '#C9A87F', onmarket: '#F26B3A', offmarket: '#A88FC9',
-    awarded: '#C89B3C', undercontract: '#2F7A4F', closing: '#5A9E76'
-  };
+  var STATUS_GROUPS = [
+    { label: 'Prospecting', color: '#7FA8C9', statuses: ['prospecting', 'preparing', 'submitted'] },
+    { label: 'Marketing', color: '#F26B3A', statuses: ['premarket', 'onmarket', 'offmarket'] },
+    { label: 'Awarded/Exclusivity', color: '#C89B3C', statuses: ['awarded'] },
+    { label: 'Under Contract', color: '#2F7A4F', statuses: ['undercontract', 'closing'] }
+  ];
+  function _groupFor(status) {
+    for (var i = 0; i < STATUS_GROUPS.length; i++) {
+      if (STATUS_GROUPS[i].statuses.indexOf(status) >= 0) return STATUS_GROUPS[i];
+    }
+    return null;
+  }
 
   function _dealLatLng(d) {
     // coordinates typed straight into the address field: "25.7907, -80.1300"
@@ -5498,20 +5499,16 @@
     var pie = document.getElementById('pa-pie');
     var legend = document.getElementById('pa-legend');
     if (pie && legend) {
-      var counts = {};
-      STATUS_OPTIONS.forEach(function(o) { counts[o[0]] = 0; });
-      active.forEach(function(d) { if (counts[d.status] !== undefined) counts[d.status]++; });
       var total = active.length || 1;
       var stops = [], acc = 0, legendHtml = '';
-      STATUS_OPTIONS.forEach(function(o) {
-        var s = o[0];
-        if (s === 'closed' || s === 'lost' || !counts[s]) return;
+      STATUS_GROUPS.forEach(function(g) {
+        var n = active.filter(function(d) { return g.statuses.indexOf(d.status) >= 0; }).length;
+        if (!n) return;
         var from = acc / total * 360;
-        acc += counts[s];
+        acc += n;
         var to = acc / total * 360;
-        var col = STATUS_COLORS[s] || '#999';
-        stops.push(col + ' ' + from.toFixed(1) + 'deg ' + to.toFixed(1) + 'deg');
-        legendHtml += '<div><span class="pa-legend-dot" style="background:' + col + '"></span>' + o[1] + ' · ' + counts[s] + '</div>';
+        stops.push(g.color + ' ' + from.toFixed(1) + 'deg ' + to.toFixed(1) + 'deg');
+        legendHtml += '<div><span class="pa-legend-dot" style="background:' + g.color + '"></span>' + g.label + ' · ' + n + '</div>';
       });
       var solo = null;
       if (stops.length === 1) { solo = stops[0].split(' ')[0]; }
@@ -5577,7 +5574,7 @@
       located.push(ll);
       var mk = L.circleMarker(ll, {
         radius: 8, weight: 2, color: '#fff',
-        fillColor: STATUS_COLORS[d.status] || '#F26B3A', fillOpacity: 0.92
+        fillColor: (_groupFor(d.status) || {}).color || '#F26B3A', fillOpacity: 0.92
       }).addTo(_pipeMap);
       mk.bindPopup(
         '<div style="font-family:Georgia,serif;font-size:13px;font-weight:600;margin-bottom:2px;">' + escapeHtml(d.name) + '</div>' +
@@ -5587,7 +5584,17 @@
       _pipeMarkers.push(mk);
     });
     if (located.length) {
-      _pipeMap.fitBounds(L.latLngBounds(located).pad(0.25));
+      // Fit to where the book actually lives: anchor on the median point and
+      // ignore far-flung outliers (bad geocodes) so one stray pin can't zoom us out to the whole country.
+      var lats = located.map(function(p) { return p[0]; }).sort(function(a, b) { return a - b; });
+      var lngs = located.map(function(p) { return p[1]; }).sort(function(a, b) { return a - b; });
+      var medLat = lats[Math.floor(lats.length / 2)];
+      var medLng = lngs[Math.floor(lngs.length / 2)];
+      var core = located.filter(function(p) {
+        return Math.abs(p[0] - medLat) < 2.5 && Math.abs(p[1] - medLng) < 2.5;
+      });
+      if (!core.length) core = located;
+      _pipeMap.fitBounds(L.latLngBounds(core).pad(0.12), { maxZoom: 11 });
     }
     if (note) {
       note.innerHTML = located.length + ' of ' + active.length + ' deals mapped' +
