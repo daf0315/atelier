@@ -2870,13 +2870,8 @@
     margin-bottom: 10px;
   }
   .pa-pie-wrap { display: flex; align-items: center; gap: 16px; }
-  .pa-pie {
-    width: 200px; height: 200px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    border: 1px solid var(--line);
-  }
-  .pa-legend { font-size: 12.5px; line-height: 2.2; }
+  .pa-pie-wrap svg { width: 100%; height: 100%; display: block; }
+
   .pa-legend-dot {
     display: inline-block; width: 9px; height: 9px; border-radius: 3px;
     margin-right: 6px; vertical-align: middle;
@@ -2897,7 +2892,7 @@
     border: 1px solid var(--line);
     border-radius: var(--r-md);
   }
-  .pa-pie-wrap { min-height: 260px; align-items: center; justify-content: center; gap: 26px; }
+  .pa-pie-wrap { flex: 1; min-height: 300px; display: flex; align-items: center; justify-content: center; }
   .pa-map-note { font-size: 10.5px; color: var(--ink-mute); margin-top: 6px; }
   .pa-map-note a { color: var(--sunrise); cursor: pointer; }
   @media (max-width: 1100px) {
@@ -3197,12 +3192,9 @@
       </div>
 
       <div class="pipe-analytics">
-        <div class="pa-card">
+        <div class="pa-card" style="display:flex;flex-direction:column;">
           <div class="pa-card-title">Deals by status</div>
-          <div class="pa-pie-wrap">
-            <div class="pa-pie" id="pa-pie"></div>
-            <div class="pa-legend" id="pa-legend"></div>
-          </div>
+          <div class="pa-pie-wrap" id="pa-pie-wrap"></div>
         </div>
         <div class="pa-card pa-map-card">
           <div class="pa-card-title" style="padding:4px 6px 0;">Deal map</div>
@@ -5496,24 +5488,46 @@
     var active = DEALS.filter(function(d) { return d.status !== 'closed' && d.status !== 'lost'; });
 
     // ── Pie: deals by status ──
-    var pie = document.getElementById('pa-pie');
-    var legend = document.getElementById('pa-legend');
-    if (pie && legend) {
-      var total = active.length || 1;
-      var stops = [], acc = 0, legendHtml = '';
-      STATUS_GROUPS.forEach(function(g) {
-        var n = active.filter(function(d) { return g.statuses.indexOf(d.status) >= 0; }).length;
-        if (!n) return;
-        var from = acc / total * 360;
-        acc += n;
-        var to = acc / total * 360;
-        stops.push(g.color + ' ' + from.toFixed(1) + 'deg ' + to.toFixed(1) + 'deg');
-        legendHtml += '<div><span class="pa-legend-dot" style="background:' + g.color + '"></span>' + g.label + ' · ' + n + '</div>';
-      });
-      var solo = null;
-      if (stops.length === 1) { solo = stops[0].split(' ')[0]; }
-      pie.style.background = solo ? solo : (stops.length ? 'conic-gradient(' + stops.join(', ') + ')' : 'var(--cream-deep)');
-      legend.innerHTML = legendHtml || '<div style="color:var(--ink-mute);">No active deals yet.</div>';
+    var pieWrap = document.getElementById('pa-pie-wrap');
+    if (pieWrap) {
+      var total = active.length;
+      if (!total) {
+        pieWrap.innerHTML = '<div style="color:var(--ink-mute);font-size:12px;">No active deals yet.</div>';
+      } else {
+        var C = 170, R = 150;                       // center, radius in a 340×340 viewBox
+        var acc = -90;                              // start at 12 o'clock
+        var wedges = '', labels = '';
+        function pt(angDeg, r) {
+          var a = angDeg * Math.PI / 180;
+          return (C + r * Math.cos(a)).toFixed(1) + ' ' + (C + r * Math.sin(a)).toFixed(1);
+        }
+        STATUS_GROUPS.forEach(function(g) {
+          var n = active.filter(function(d) { return g.statuses.indexOf(d.status) >= 0; }).length;
+          if (!n) return;
+          var sweep = n / total * 360;
+          var a0 = acc, a1 = acc + sweep;
+          acc = a1;
+          if (sweep >= 359.99) {
+            wedges += '<circle cx="' + C + '" cy="' + C + '" r="' + R + '" fill="' + g.color + '" />';
+          } else {
+            var large = sweep > 180 ? 1 : 0;
+            wedges += '<path d="M ' + C + ' ' + C + ' L ' + pt(a0, R) + ' A ' + R + ' ' + R + ' 0 ' + large + ' 1 ' + pt(a1, R) + ' Z" fill="' + g.color + '" stroke="#FBF7F2" stroke-width="2.5" />';
+          }
+          var mid = (a0 + a1) / 2;
+          if (sweep >= 26) {
+            // label lives inside the slice
+            var p = pt(mid, R * 0.62).split(' ');
+            labels += '<text x="' + p[0] + '" y="' + (parseFloat(p[1]) - 6) + '" text-anchor="middle" fill="#fff" font-size="14" font-weight="700" font-family="-apple-system,sans-serif">' + escapeHtml(g.label) + '</text>' +
+                      '<text x="' + p[0] + '" y="' + (parseFloat(p[1]) + 14) + '" text-anchor="middle" fill="#fff" font-size="15" font-weight="700" font-family="Georgia,serif">' + n + '</text>';
+          } else {
+            // slice too thin — label sits just outside in the slice color
+            var po = pt(mid, R + 14).split(' ');
+            var anchor = Math.cos(mid * Math.PI / 180) >= 0 ? 'start' : 'end';
+            labels += '<text x="' + po[0] + '" y="' + po[1] + '" text-anchor="' + anchor + '" fill="' + g.color + '" font-size="12" font-weight="700" font-family="-apple-system,sans-serif">' + escapeHtml(g.label) + ' · ' + n + '</text>';
+          }
+        });
+        pieWrap.innerHTML = '<svg viewBox="0 0 340 340" preserveAspectRatio="xMidYMid meet">' + wedges + labels + '</svg>';
+      }
     }
 
     // ── Bars: projected fees by expected closing month (next 6 with data) ──
@@ -5561,8 +5575,8 @@
     }
     if (!_pipeMap) {
       _pipeMap = L.map(el, { scrollWheelZoom: false }).setView([26.1, -80.4], 8);
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
+      L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap · © CARTO'
       }).addTo(_pipeMap);
     }
     _pipeMarkers.forEach(function(m) { _pipeMap.removeLayer(m); });
@@ -5591,10 +5605,10 @@
       var medLat = lats[Math.floor(lats.length / 2)];
       var medLng = lngs[Math.floor(lngs.length / 2)];
       var core = located.filter(function(p) {
-        return Math.abs(p[0] - medLat) < 2.5 && Math.abs(p[1] - medLng) < 2.5;
+        return Math.abs(p[0] - medLat) < 1.5 && Math.abs(p[1] - medLng) < 1.5;
       });
       if (!core.length) core = located;
-      _pipeMap.fitBounds(L.latLngBounds(core).pad(0.12), { maxZoom: 11 });
+      _pipeMap.fitBounds(L.latLngBounds(core).pad(0.06), { maxZoom: 12 });
     }
     if (note) {
       note.innerHTML = located.length + ' of ' + active.length + ' deals mapped' +
