@@ -2817,6 +2817,18 @@
   .ct-name { font-weight: 600; color: var(--ink); }
   .ct-muted { color: var(--ink-mute); }
   .ct-table a { color: var(--sunrise); text-decoration: none; }
+  .ct-action {
+    opacity: 0;
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 5px;
+    font-size: 12px;
+    color: var(--ink-mute);
+    transition: opacity .12s ease;
+  }
+  .ct-table tbody tr:hover .ct-action { opacity: 1; }
+  .ct-action:hover { color: var(--sunrise); background: var(--sunrise-soft); }
+  .ct-action-del:hover { color: var(--rose); background: var(--rose-soft); }
   .ct-table a:hover { text-decoration: underline; }
 
   .toast {
@@ -3280,9 +3292,12 @@
             <h2 class="contacts-title">Contacts</h2>
             <div class="contacts-count" id="contacts-count">0 people · 0 firms</div>
           </div>
-          <div class="contacts-actions" style="display:flex;gap:8px;">
+          <div class="contacts-actions" style="display:flex;gap:8px;align-items:center;">
             <button class="btn primary" onclick="openNewContactModal('person')">+ Person</button>
             <button class="btn" onclick="openNewContactModal('firm')">+ Firm</button>
+            <button class="btn" onclick="exportContactsCsv()">Export CSV</button>
+            <button class="btn" onclick="document.getElementById('contacts-import-file').click()">Import CSV</button>
+            <input type="file" id="contacts-import-file" accept=".csv,text/csv" style="display:none;" onchange="handleContactsImportFile(this)" />
           </div>
         </div>
 
@@ -4388,6 +4403,138 @@
   var contactsView = 'person';
   var selectedContactId = null;
 
+  window.exportContactsCsv = function() {
+    // Exports what you're looking at: current view (People or Firms), current search + role filter applied
+    var q = (document.getElementById('contacts-search').value || '').toLowerCase().trim();
+    var list = CONTACTS.filter(function(c) {
+      if (c.kind !== contactsView) return false;
+      if (contactsFilter !== 'all' && (!c.roles || c.roles.indexOf(contactsFilter) < 0)) return false;
+      if (q) {
+        var hay = (c.name + ' ' + (c.title || '') + ' ' + (c.notes || '') + ' ' + (c.email || '') + ' ' + (c.city || '') + ' ' + (getFirmName(c) || '')).toLowerCase();
+        if (hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    }).sort(function(a, b) { return a.name.localeCompare(b.name); });
+    var lines;
+    if (contactsView === 'person') {
+      lines = ['Name,Company Name,Title,Email,Phone,Mobile,City,State,Country,Roles,Notes'];
+      list.forEach(function(c) {
+        lines.push([c.name, getFirmName(c), c.title, c.email, c.directPhone, c.phone, c.city, c.state, c.country, (c.roles || []).join('; '), c.notes].map(_csvCell).join(','));
+      });
+    } else {
+      lines = ['Company Name,Website,Headquarter City,Headquarter State,Headquarter Country,Roles,Notes'];
+      list.forEach(function(c) {
+        lines.push([c.name, c.website, c.city, c.state, c.country, (c.roles || []).join('; '), c.notes].map(_csvCell).join(','));
+      });
+    }
+    var csv = lines.join('\n');
+    var blob = new Blob([csv], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'atelier_' + (contactsView === 'person' ? 'people' : 'firms') + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast('Exported', list.length + ' ' + (contactsView === 'person' ? 'people' : 'firms') + ' to CSV.');
+  };
+
+  window.handleContactsImportFile = function(input) {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function() { window._importContactsCsv(String(reader.result)); input.value = ''; };
+    reader.readAsText(file);
+  };
+
+  window._importContactsCsv = function(text) {
+    var rows = _parseCsv(text);
+    if (rows.length < 2) { alert('That CSV has no data rows.'); return; }
+    var header = rows[0].map(function(h) { return h.toLowerCase().trim(); });
+    function col(row, names) {
+      for (var i = 0; i < names.length; i++) {
+        var idx = header.indexOf(names[i]);
+        if (idx >= 0 && row[idx] !== undefined) return String(row[idx]).trim();
+      }
+      return '';
+    }
+    var isPeople = header.indexOf('name') >= 0;
+    var isFirms = !isPeople && (header.indexOf('company name') >= 0 || header.indexOf('company') >= 0);
+    if (!isPeople && !isFirms) { alert('Header not recognized. People CSVs need a "Name" column; firm CSVs need "Company Name". Tip: Export CSV gives you the exact template.'); return; }
+    var existingNames = {};
+    CONTACTS.forEach(function(c) { existingNames[c.kind + '|' + c.name.toLowerCase()] = true; });
+    var added = 0, skipped = 0, firmsCreated = 0;
+
+    function ensureFirm(name, extra) {
+      if (!name) return Promise.resolve(null);
+      var found = CONTACTS.find(function(c) { return c.kind === 'firm' && c.name.toLowerCase() === name.toLowerCase(); });
+      if (found) return Promise.resolve(found.id);
+      var firm = { id: 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), kind: 'firm', name: name,
+                   firmType: '', website: (extra && extra.website) || '', city: (extra && extra.city) || '', state: (extra && extra.state) || '', country: (extra && extra.country) || '',
+                   roles: [], notes: (extra && extra.notes) || '', description: '', criteria: null, linkedContacts: [] };
+      CONTACTS.push(firm);
+      existingNames['firm|' + name.toLowerCase()] = true;
+      firmsCreated++;
+      if (window._db && window._db.insertContact) {
+        return window._db.insertContact(firm).then(function(row) {
+          if (row) {
+            var oldId = firm.id; firm.id = row.id;
+            CONTACTS.forEach(function(p) { if (p.kind === 'person' && p.firmId === oldId) p.firmId = row.id; });
+            if (window._db.updateContact && (firm.website || firm.city || firm.state || firm.country)) {
+              window._db.updateContact(row.id, { website: firm.website || null, city: firm.city || null, state: firm.state || null, country: firm.country || null });
+            }
+          }
+          return firm.id;
+        });
+      }
+      return Promise.resolve(firm.id);
+    }
+
+    var chain = Promise.resolve();
+    rows.slice(1).forEach(function(r) {
+      if (!r.join('').trim()) return;
+      chain = chain.then(function() {
+        if (isFirms) {
+          var fname = col(r, ['company name', 'company', 'name']);
+          if (!fname) { skipped++; return; }
+          if (existingNames['firm|' + fname.toLowerCase()]) { skipped++; return; }
+          added++;
+          return ensureFirm(fname, { website: col(r, ['website']).replace(/^https?:\/\//, ''), city: col(r, ['headquarter city', 'city']), state: col(r, ['headquarter state', 'state']), country: col(r, ['headquarter country', 'country']), notes: col(r, ['notes']) });
+        }
+        var name = col(r, ['name']);
+        if (!name) { skipped++; return; }
+        if (existingNames['person|' + name.toLowerCase()]) { skipped++; return; }
+        var firmName = col(r, ['company name', 'company', 'firm']);
+        return ensureFirm(firmName).then(function(firmId) {
+          var person = { id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), kind: 'person', name: name,
+                         title: col(r, ['title']), firmId: firmId, phone: col(r, ['mobile', 'cell']), directPhone: col(r, ['phone', 'office phone']),
+                         email: col(r, ['email']), city: col(r, ['city']), state: col(r, ['state']), country: col(r, ['country']),
+                         lastContact: '', personal: null, roles: [], notes: col(r, ['notes']), relationshipStrength: '' };
+          CONTACTS.push(person);
+          existingNames['person|' + name.toLowerCase()] = true;
+          added++;
+          if (firmId) {
+            var f = CONTACTS.find(function(x) { return x.id === firmId; });
+            if (f) { f.linkedContacts = f.linkedContacts || []; f.linkedContacts.push(person.id); }
+          }
+          if (window._db && window._db.insertContact) {
+            return window._db.insertContact(person).then(function(row) {
+              if (row) {
+                person.id = row.id;
+                if (window._db.updateContact && (person.directPhone || person.city || person.state || person.country)) {
+                  window._db.updateContact(row.id, { direct_phone: person.directPhone || null, city: person.city || null, state: person.state || null, country: person.country || null });
+                }
+              }
+            });
+          }
+        });
+      });
+    });
+    chain.then(function() {
+      renderContactsList();
+      showToast('Import complete', added + ' added · ' + skipped + ' skipped (blank or already exist)' + (firmsCreated ? ' · ' + firmsCreated + ' firms created' : ''));
+    });
+  };
+
   window.setContactsView = function(view, el) {
     contactsView = view;
     document.querySelectorAll('.ct-view-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -4425,6 +4572,51 @@
     renderContactsList();
   };
 
+  function _fmtPhone(s) {
+    if (!s) return '';
+    var d = String(s).replace(/\D/g, '');
+    if (d.length === 11 && d.charAt(0) === '1') d = d.slice(1);
+    if (d.length === 10) return '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6);
+    return String(s);
+  }
+  function _telHref(s) { return 'tel:' + String(s).replace(/\D/g, ''); }
+
+  function _criteriaSummary(firm) {
+    if (!firm || !firm.criteria) return '';
+    var cr = firm.criteria;
+    var parts = [];
+    if (cr.propertyTypes && cr.propertyTypes.length) parts.push(cr.propertyTypes.join(', '));
+    if (cr.dealMin || cr.dealMax) parts.push((cr.dealMin || 'Any') + '–' + (cr.dealMax || 'Any'));
+    if (cr.strategy && cr.strategy.length && parts.length < 2) parts.push(cr.strategy[0]);
+    return parts.join(' · ');
+  }
+
+  function _csvCell(v) {
+    v = v === null || v === undefined ? '' : String(v);
+    return '"' + v.replace(/"/g, '""') + '"';
+  }
+  function _parseCsv(text) {
+    var rows = [], row = [], cur = '', inQ = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (inQ) {
+        if (ch === '"') {
+          if (text[i + 1] === '"') { cur += '"'; i++; }
+          else inQ = false;
+        } else cur += ch;
+      } else {
+        if (ch === '"') inQ = true;
+        else if (ch === ',') { row.push(cur); cur = ''; }
+        else if (ch === '\n' || ch === '\r') {
+          if (cur !== '' || row.length) { row.push(cur); rows.push(row); row = []; cur = ''; }
+          if (ch === '\r' && text[i + 1] === '\n') i++;
+        } else cur += ch;
+      }
+    }
+    if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+    return rows;
+  }
+
   window.renderContactsList = function() {
     var wrap = document.getElementById('contacts-table-wrap');
     if (!wrap) return;
@@ -4443,32 +4635,48 @@
     });
     filtered.sort(function(a, b) { return a.name.localeCompare(b.name); });
 
+    function actionCell(id) {
+      return '<td style="text-align:right;white-space:nowrap;">' +
+        '<span class="ct-action" title="Edit" onclick="event.stopPropagation();openEditContactModal(\'' + id + '\')">✎</span>' +
+        '<span class="ct-action ct-action-del" title="Delete" onclick="event.stopPropagation();confirmDeleteContact(\'' + id + '\')">🗑</span>' +
+      '</td>';
+    }
+    function phoneCell(v) {
+      return v ? '<a href="' + _telHref(v) + '" onclick="event.stopPropagation()">' + escapeHtml(_fmtPhone(v)) + '</a>' : '<span class="ct-muted">—</span>';
+    }
     var head, rows;
     if (contactsView === 'person') {
-      head = '<tr><th>Name</th><th>Company Name</th><th>Title</th><th>Email</th><th>Phone</th><th>Mobile</th><th>City</th><th>State</th><th>Country</th></tr>';
+      head = '<tr><th>Name</th><th>Company Name</th><th>Investment Criteria</th><th>Title</th><th>Email</th><th>Phone</th><th>Mobile</th><th>City</th><th>State</th><th>Country</th><th></th></tr>';
       rows = filtered.map(function(c) {
+        var firm = c.firmId ? CONTACTS.find(function(x) { return x.id === c.firmId; }) : null;
+        var crit = _criteriaSummary(firm);
         return '<tr onclick="selectContact(\'' + c.id + '\')">' +
           '<td class="ct-name">' + escapeHtml(c.name) + roleEmojis(c) + '</td>' +
           '<td>' + escapeHtml(getFirmName(c) || '—') + '</td>' +
+          '<td class="ct-muted" title="' + escapeHtml(crit) + '">' + (crit ? escapeHtml(crit) : '—') + '</td>' +
           '<td class="ct-muted">' + escapeHtml(c.title || '—') + '</td>' +
           '<td>' + (c.email ? '<a href="mailto:' + c.email + '" onclick="event.stopPropagation()">' + escapeHtml(c.email) + '</a>' : '<span class="ct-muted">—</span>') + '</td>' +
-          '<td>' + (c.directPhone ? '<a href="tel:' + c.directPhone.replace(/\D/g, '') + '" onclick="event.stopPropagation()">' + escapeHtml(c.directPhone) + '</a>' : '<span class="ct-muted">—</span>') + '</td>' +
-          '<td>' + (c.phone ? '<a href="tel:' + c.phone.replace(/\D/g, '') + '" onclick="event.stopPropagation()">' + escapeHtml(c.phone) + '</a>' : '<span class="ct-muted">—</span>') + '</td>' +
+          '<td>' + phoneCell(c.directPhone) + '</td>' +
+          '<td>' + phoneCell(c.phone) + '</td>' +
           '<td class="ct-muted">' + escapeHtml(c.city || '—') + '</td>' +
           '<td class="ct-muted">' + escapeHtml(c.state || '—') + '</td>' +
           '<td class="ct-muted">' + escapeHtml(c.country || '—') + '</td>' +
+          actionCell(c.id) +
         '</tr>';
       });
     } else {
-      head = '<tr><th>Company Name</th><th>Website</th><th>Headquarter City</th><th>Headquarter State</th><th>Headquarter Country</th></tr>';
+      head = '<tr><th>Company Name</th><th>Investment Criteria</th><th>Website</th><th>Headquarter City</th><th>Headquarter State</th><th>Headquarter Country</th><th></th></tr>';
       rows = filtered.map(function(c) {
         var site = c.website ? c.website.replace(/^https?:\/\//, '') : '';
+        var crit = _criteriaSummary(c);
         return '<tr onclick="selectContact(\'' + c.id + '\')">' +
           '<td class="ct-name">' + escapeHtml(c.name) + roleEmojis(c) + '</td>' +
+          '<td class="ct-muted" title="' + escapeHtml(crit) + '">' + (crit ? escapeHtml(crit) : '—') + '</td>' +
           '<td>' + (site ? '<a href="https://' + escapeHtml(site) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + escapeHtml(site) + '</a>' : '<span class="ct-muted">—</span>') + '</td>' +
           '<td class="ct-muted">' + escapeHtml(c.city || '—') + '</td>' +
           '<td class="ct-muted">' + escapeHtml(c.state || '—') + '</td>' +
           '<td class="ct-muted">' + escapeHtml(c.country || '—') + '</td>' +
+          actionCell(c.id) +
         '</tr>';
       });
     }
@@ -4521,6 +4729,96 @@
     now.setHours(0, 0, 0, 0);
     return Math.round((now - t) / (1000 * 60 * 60 * 24));
   }
+
+  var CRITERIA_PROPERTY_TYPES = ['Land', 'Multifamily', 'Industrial', 'Retail', 'Office', 'Mixed-Use', 'Hospitality'];
+  var CRITERIA_STRATEGIES = ['Ground-up Development', 'Value-Add', 'Core / Core+', 'Opportunistic', 'Land Banking'];
+
+  function criteriaSection(firm) {
+    var cr = firm.criteria || {};
+    var hasAny = (cr.propertyTypes && cr.propertyTypes.length) || cr.geography || cr.dealMin || cr.dealMax || cr.sizeMetrics || (cr.strategy && cr.strategy.length);
+    var body;
+    if (!hasAny) {
+      body = '<div class="profile-info-value muted">No criteria on file yet — capture what this group buys so deals can be matched to them.</div>';
+    } else {
+      function item(label, val) {
+        return val ? '<div class="profile-info-item"><div class="profile-info-label">' + label + '</div><div class="profile-info-value">' + val + '</div></div>' : '';
+      }
+      var dealRange = '';
+      if (cr.dealMin || cr.dealMax) {
+        dealRange = (cr.dealMin ? _fmtMoneyDisplay(cr.dealMin) : 'Any') + ' – ' + (cr.dealMax ? _fmtMoneyDisplay(cr.dealMax) : 'Any');
+      }
+      body = '<div class="profile-info-grid">' +
+        item('Property types', (cr.propertyTypes || []).map(escapeHtml).join(' · ')) +
+        item('Target geography', escapeHtml(cr.geography || '')) +
+        item('Deal size range', escapeHtml(dealRange)) +
+        item('Size metrics', escapeHtml(cr.sizeMetrics || '')) +
+        item('Strategy', (cr.strategy || []).map(escapeHtml).join(' · ')) +
+      '</div>';
+    }
+    return '<div class="profile-section">' +
+      '<div class="profile-section-title">Investment criteria</div>' +
+      body +
+      '<button class="btn" style="font-size:11px;margin-top:10px;" onclick="openCriteriaModal(\'' + firm.id + '\')">' + (hasAny ? 'Edit criteria' : 'Set criteria') + '</button>' +
+    '</div>';
+  }
+
+  window.openCriteriaModal = function(firmId) {
+    var f = CONTACTS.find(function(x) { return x.id === firmId; });
+    if (!f || f.kind !== 'firm') return;
+    var cr = f.criteria || {};
+    var typeBoxes = CRITERIA_PROPERTY_TYPES.map(function(t) {
+      var checked = (cr.propertyTypes || []).indexOf(t) >= 0 ? ' checked' : '';
+      return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 12px 6px 0;"><input type="checkbox" data-crit="ptype" value="' + t + '"' + checked + ' /> ' + t + '</label>';
+    }).join('');
+    var stratBoxes = CRITERIA_STRATEGIES.map(function(s) {
+      var checked = (cr.strategy || []).indexOf(s) >= 0 ? ' checked' : '';
+      return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 12px 6px 0;"><input type="checkbox" data-crit="strat" value="' + s + '"' + checked + ' /> ' + s + '</label>';
+    }).join('');
+    var html =
+      '<div class="modal-header"><div class="modal-eyebrow">Investment criteria</div>' +
+      '<div class="modal-title" style="font-size:20px;">' + escapeHtml(f.name) + '</div></div>' +
+      '<div class="modal-body">' +
+        '<div class="field"><label class="field-label">Property types</label><div>' + typeBoxes + '</div></div>' +
+        '<div class="field"><label class="field-label">Target geography</label>' +
+          '<input class="field-input" id="cm-geo" value="' + escapeHtml(cr.geography || '') + '" placeholder="e.g. East Broward, Miami urban core, Palm Beach coastal" /></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">Deal size min ($)</label><input class="field-input" id="cm-min" value="' + escapeHtml(cr.dealMin || '') + '" placeholder="e.g. $10M" /></div>' +
+          '<div class="field"><label class="field-label">Deal size max ($)</label><input class="field-input" id="cm-max" value="' + escapeHtml(cr.dealMax || '') + '" placeholder="e.g. $50M" /></div>' +
+        '</div>' +
+        '<div class="field"><label class="field-label">Size metrics</label>' +
+          '<input class="field-input" id="cm-size" value="' + escapeHtml(cr.sizeMetrics || '') + '" placeholder="e.g. 150+ units · 2–10 acres" /></div>' +
+        '<div class="field"><label class="field-label">Strategy</label><div>' + stratBoxes + '</div></div>' +
+      '</div>' +
+      '<div class="modal-footer">' +
+        '<div class="modal-footer-left"></div>' +
+        '<div class="modal-footer-right">' +
+          '<button class="btn" onclick="closeModal()">Cancel</button>' +
+          '<button class="btn primary" onclick="saveCriteria(\'' + firmId + '\')">Save criteria</button>' +
+        '</div></div>';
+    document.getElementById('modal').innerHTML = html;
+    document.getElementById('modal-backdrop').classList.add('show');
+    window._modalCancel = null;
+  };
+
+  window.saveCriteria = function(firmId) {
+    var f = CONTACTS.find(function(x) { return x.id === firmId; });
+    if (!f) return;
+    var ptypes = [], strats = [];
+    document.querySelectorAll('input[data-crit="ptype"]:checked').forEach(function(cb) { ptypes.push(cb.value); });
+    document.querySelectorAll('input[data-crit="strat"]:checked').forEach(function(cb) { strats.push(cb.value); });
+    f.criteria = {
+      propertyTypes: ptypes,
+      geography: document.getElementById('cm-geo').value.trim() || null,
+      dealMin: document.getElementById('cm-min').value.trim() || null,
+      dealMax: document.getElementById('cm-max').value.trim() || null,
+      sizeMetrics: document.getElementById('cm-size').value.trim() || null,
+      strategy: strats
+    };
+    if (window._db && window._db.updateContact) window._db.updateContact(firmId, { criteria: f.criteria });
+    document.getElementById('modal-backdrop').classList.remove('show');
+    renderContactProfile(firmId);
+    showToast('Criteria saved', f.name);
+  };
 
   function renderContactProfile(contactId) {
     var pane = document.getElementById('contacts-profile');
@@ -4586,40 +4884,8 @@
           touchWarning +
         '</div>';
     } else {
-      // FIRM PROFILE — structured investment criteria (if present) or fallback description
-      if (contact.criteria) {
-        var crit = contact.criteria;
-        var prefChips = (crit.investmentPreference || []).map(function(p) {
-          return '<span class="criteria-chip emphasized">' + escapeHtml(p) + '</span>';
-        }).join('');
-        var propBlocks = (crit.propertyTypes || []).map(function(pt) {
-          var subChips = (pt.subTypes || []).map(function(s) {
-            return '<span class="criteria-chip subtype">' + escapeHtml(s) + '</span>';
-          }).join('');
-          return '<div class="criteria-property-block">' +
-            '<div class="criteria-property-header">' +
-              '<span class="criteria-property-name">' + escapeHtml(pt.type) + '</span>' +
-              (pt.size ? '<span class="criteria-size">' + escapeHtml(pt.size) + '</span>' : '') +
-            '</div>' +
-            (subChips ? '<div class="criteria-subtypes">' + subChips + '</div>' : '') +
-          '</div>';
-        }).join('');
-        var geoChips = (crit.geography || []).map(function(g) {
-          return '<span class="criteria-chip">' + escapeHtml(g) + '</span>';
-        }).join('');
+      // Firm description (structured criteria now lives in its own criteriaSection)
 
-        contactInfo =
-          '<div class="profile-section">' +
-            '<div class="profile-section-title">Investment criteria</div>' +
-            '<div class="criteria-grid">' +
-              (prefChips ? '<div class="criteria-row"><div class="criteria-label">Preference</div><div class="criteria-value">' + prefChips + '</div></div>' : '') +
-              (propBlocks ? '<div class="criteria-row"><div class="criteria-label">Property Types</div><div class="criteria-value" style="flex-direction:column;align-items:stretch;gap:6px;">' + propBlocks + '</div></div>' : '') +
-              (crit.dealSize ? '<div class="criteria-row"><div class="criteria-label">Deal Size</div><div class="criteria-value"><span class="criteria-chip">' + escapeHtml(crit.dealSize) + '</span></div></div>' : '') +
-              (geoChips ? '<div class="criteria-row"><div class="criteria-label">Geography</div><div class="criteria-value">' + geoChips + '</div></div>' : '') +
-              (crit.notes ? '<div class="criteria-row"><div class="criteria-label">Notes</div><div class="criteria-value" style="display:block;line-height:1.55;color:var(--ink-soft);">' + escapeHtml(crit.notes) + '</div></div>' : '') +
-            '</div>' +
-          '</div>';
-      } else {
         contactInfo =
           '<div class="profile-section">' +
             '<div class="profile-section-title">About</div>' +
@@ -4627,7 +4893,7 @@
               escapeHtml(contact.description || 'No investment criteria on file yet. Add them so this firm can be matched to deals automatically.') +
             '</div>' +
           '</div>';
-      }
+      
     }
 
     // Linked contacts (for firms) or firm link (for people)
@@ -4846,6 +5112,7 @@
           '</div>' +
         '</div>' +
         overviewBlock +
+        (isFirm ? criteriaSection(contact) : '') +
         quickActions +
         contactInfo +
         linkedBlock +
