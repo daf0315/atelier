@@ -2778,6 +2778,49 @@
   .pipeline-summary { display: flex; align-items: center; }
   .pipeline-summary-stats { display: flex; gap: 56px; align-items: center; }
 
+  .sec-edit {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 12px;
+    color: var(--ink-mute);
+    cursor: pointer;
+    padding: 2px 7px;
+    border-radius: 5px;
+    vertical-align: middle;
+  }
+  .sec-edit:hover { color: var(--sunrise); background: var(--sunrise-soft); }
+  .crit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 12px;
+  }
+  .crit-box {
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: 11px 14px;
+    background: var(--cream);
+  }
+  .crit-box-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 7px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .ci-two-col {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 1.2fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 700px) {
+    .ci-two-col { grid-template-columns: 1fr; }
+    .ci-two-col > div:last-child { border-left: none !important; padding-left: 0 !important; }
+  }
+
   .ct-view-btn {
     border: none;
     background: white;
@@ -4801,41 +4844,45 @@
     var owner = _criteriaOwner(contact);
     var cr = owner.criteria ? _critV2(owner.criteria) : null;
     var hasAny = cr && (Object.keys(cr.types).length || cr.geography || cr.notes);
-    var shared = (owner.id !== contact.id)
-      ? '<div style="font-size:10.5px;color:var(--ink-mute);margin-bottom:8px;">Shared with ' + escapeHtml(owner.name) + ' — one profile, one set of criteria.</div>'
-      : '';
     var body;
     if (!hasAny) {
-      body = '<div class="profile-info-value muted">No criteria on file yet — capture what ' + (owner.kind === 'firm' ? 'this group buys' : (owner.name.split(' ')[0] || 'they') + ' buys') + ' so deals can be matched.</div>';
+      body = '<div class="profile-info-value muted">No criteria on file yet — hit ✎ to capture what ' + (owner.kind === 'firm' ? 'this group' : owner.name.split(' ')[0]) + ' buys, and deals can be matched to them.</div>';
     } else {
-      var typeBlocks = Object.keys(cr.types).map(function(t) {
+      var boxes = Object.keys(cr.types).map(function(t) {
         var tc = cr.types[t];
-        var detail = _typeSummary(t, tc);
-        var devDetail = '';
-        if (t === 'Land' && tc.devDetails) {
-          devDetail = Object.keys(tc.devDetails).map(function(dt) {
-            var dd = tc.devDetails[dt];
+        var rows = '';
+        function row(label, val) {
+          if (!val) return '';
+          return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:3px 0;">' +
+            '<span style="color:var(--ink-mute);">' + label + '</span><span style="text-align:right;">' + escapeHtml(val) + '</span></div>';
+        }
+        rows += row('Min site size', tc.minAcres ? tc.minAcres + ' ac' : '');
+        rows += row('Min units', tc.minUnits || '');
+        rows += row('Min SF', tc.minSF || '');
+        rows += row('Min keys', tc.minKeys || '');
+        rows += row('Deal size', (tc.minDeal || tc.maxDeal) ? (tc.minDeal || 'Any') + ' – ' + (tc.maxDeal || 'Any') : '');
+        rows += row('Product', (tc.products && tc.products.length) ? tc.products.join(', ') : '');
+        if (t === 'Land' && tc.devTypes && tc.devTypes.length) {
+          rows += '<div style="font-size:11px;color:var(--ink-mute);margin-top:6px;">Builds</div>';
+          tc.devTypes.forEach(function(dt) {
+            var dd = (tc.devDetails && tc.devDetails[dt]) || {};
             var parts = [];
             if (dd.minUnits) parts.push(dd.minUnits + '+ units');
-            if (dd.products && dd.products.length) parts.push(dd.products.join('/'));
+            if (dd.products && dd.products.length) parts.push(dd.products.join(', '));
             if (dd.specs) parts.push(dd.specs);
-            return parts.length ? '<div style="font-size:11px;color:var(--ink-soft);padding-left:12px;">↳ ' + escapeHtml(dt) + ': ' + escapeHtml(parts.join(' · ')) + '</div>' : '';
-          }).join('');
+            rows += '<div style="font-size:12px;padding:2px 0;">' + escapeHtml(dt) +
+              (parts.length ? ' <span style="color:var(--ink-soft);">— ' + escapeHtml(parts.join(' · ')) + '</span>' : '') + '</div>';
+          });
         }
-        return '<div style="padding:7px 0;border-bottom:1px solid var(--line-soft);">' +
-          '<span style="font-weight:600;">' + escapeHtml(t) + '</span>' +
-          (detail ? ' <span style="color:var(--ink-soft);font-size:12px;">— ' + escapeHtml(detail) + '</span>' : '') +
-          devDetail +
-        '</div>';
+        return '<div class="crit-box"><div class="crit-box-title">' + escapeHtml(t) + '</div>' + rows + '</div>';
       }).join('');
-      body = typeBlocks +
-        (cr.geography ? '<div style="padding:7px 0;font-size:12px;"><span style="font-weight:600;">Geography:</span> <span style="color:var(--ink-soft);">' + escapeHtml(cr.geography) + '</span></div>' : '') +
-        (cr.notes ? '<div style="padding:4px 0;font-size:11.5px;color:var(--ink-mute);">' + escapeHtml(cr.notes) + '</div>' : '');
+      body = '<div class="crit-grid">' + boxes + '</div>' +
+        (cr.geography ? '<div style="margin-top:10px;font-size:12px;"><span style="color:var(--ink-mute);">Geography:</span> ' + escapeHtml(cr.geography) + '</div>' : '') +
+        (cr.notes ? '<div style="margin-top:4px;font-size:11.5px;color:var(--ink-mute);">' + escapeHtml(cr.notes) + '</div>' : '');
     }
     return '<div class="profile-section">' +
-      '<div class="profile-section-title">Investment criteria</div>' +
-      shared + body +
-      '<button class="btn" style="font-size:11px;margin-top:10px;" onclick="openCriteriaModal(\'' + contact.id + '\')">' + (hasAny ? 'Edit criteria' : 'Set criteria') + '</button>' +
+      '<div class="profile-section-title">Investment criteria <span class="sec-edit" title="Edit criteria" onclick="openCriteriaModal(\'' + contact.id + '\')">✎</span></div>' +
+      body +
     '</div>';
   }
 
@@ -5009,6 +5056,22 @@
     showToast('Criteria saved', owner.name);
   };
 
+  window.openPhoneActionModal = function(phone, name) {
+    var digits = String(phone).replace(/\D/g, '');
+    var html =
+      '<div class="modal-header"><div class="modal-eyebrow">' + escapeHtml(name || '') + '</div>' +
+      '<div class="modal-title" style="font-size:20px;">' + escapeHtml(_fmtPhone(phone)) + '</div></div>' +
+      '<div class="modal-body" style="display:flex;gap:10px;">' +
+        '<a class="btn primary" style="flex:1;text-align:center;text-decoration:none;" href="tel:' + digits + '" onclick="closeModal()">📞 Call</a>' +
+        '<a class="btn" style="flex:1;text-align:center;text-decoration:none;" href="sms:' + digits + '" onclick="closeModal()">💬 Text</a>' +
+      '</div>' +
+      '<div class="modal-footer"><div class="modal-footer-left"></div>' +
+      '<div class="modal-footer-right"><button class="btn" onclick="closeModal()">Cancel</button></div></div>';
+    document.getElementById('modal').innerHTML = html;
+    document.getElementById('modal-backdrop').classList.add('show');
+    window._modalCancel = null;
+  };
+
   function renderContactProfile(contactId) {
     var pane = document.getElementById('contacts-profile');
     if (!pane) return;
@@ -5039,17 +5102,6 @@
       '<button class="profile-header-log" style="position:static;" onclick="openLogForm(\'' + contactId + '\')">📝 Log</button>' +
     '</div>';
 
-    // Quick actions row (people only — call/text/email, NO log)
-    var quickActions = '';
-    if (!isFirm) {
-      var phone = contact.phone || contact.directPhone || '';
-      quickActions =
-        '<div class="profile-quick-actions">' +
-          '<a class="qa-btn" href="' + (phone ? 'tel:' + phone.replace(/\D/g,'') : '#') + '"' + (phone ? '' : ' style="opacity:.4"') + '><span class="qa-btn-icon">📞</span>Call</a>' +
-          '<a class="qa-btn" href="' + (phone ? 'sms:' + phone.replace(/\D/g,'') : '#') + '"' + (phone ? '' : ' style="opacity:.4"') + '><span class="qa-btn-icon">💬</span>Text</a>' +
-          '<a class="qa-btn" href="' + (contact.email ? 'mailto:' + contact.email : '#') + '"' + (contact.email ? '' : ' style="opacity:.4"') + '><span class="qa-btn-icon">✉️</span>Email</a>' +
-        '</div>';
-    }
 
     // Contact info block
     var contactInfo = '';
@@ -5063,14 +5115,35 @@
       } else if (days > 30) {
         touchWarning = '<div class="profile-last-touch-warning">⏰ Last contact ' + days + ' days ago — approaching check-in threshold.</div>';
       }
+      function phoneLink(v) {
+        return '<a onclick="openPhoneActionModal(\'' + v.replace(/\D/g, '') + '\', \'' + escapeHtml(contact.name).replace(/'/g, '') + '\')" style="color:var(--sunrise);text-decoration:none;cursor:pointer;">' + escapeHtml(_fmtPhone(v)) + '</a>';
+      }
+      var notesCol = '';
+      var noteBits = '';
+      if (contact.personal) {
+        var p = contact.personal;
+        if (p.livesIn) noteBits += '<div class="profile-info-label" style="margin-top:6px;">Lives in</div><div class="profile-info-value">' + escapeHtml(p.livesIn) + '</div>';
+        if (p.previouslyAt) noteBits += '<div class="profile-info-label" style="margin-top:6px;">Previously at</div><div class="profile-info-value">' + escapeHtml(p.previouslyAt) + '</div>';
+        if (p.family) noteBits += '<div class="profile-info-label" style="margin-top:6px;">Family</div><div class="profile-info-value">' + escapeHtml(p.family) + '</div>';
+        if (p.interests) noteBits += '<div class="profile-info-label" style="margin-top:6px;">Interests</div><div class="profile-info-value">' + escapeHtml(p.interests) + '</div>';
+        if (p.notes) noteBits += '<div class="profile-info-value" style="margin-top:6px;white-space:pre-wrap;">' + escapeHtml(p.notes) + '</div>';
+      }
+      if (contact.notes) noteBits += '<div class="profile-info-value" style="margin-top:6px;white-space:pre-wrap;">' + escapeHtml(contact.notes) + '</div>';
+      notesCol = '<div style="border-left:1px solid var(--line-soft);padding-left:18px;">' +
+        '<div class="profile-info-label">Notes</div>' +
+        (noteBits || '<div class="profile-info-value muted">Nothing yet — ✎ Edit to add color on this relationship.</div>') +
+      '</div>';
       contactInfo =
         '<div class="profile-section">' +
-          '<div class="profile-section-title">Contact info</div>' +
-          '<div class="profile-info-grid">' +
-            '<div class="profile-info-item"><div class="profile-info-label">Mobile</div><div class="profile-info-value ' + (contact.phone ? '' : 'muted') + '">' + (contact.phone ? '<a href="' + _telHref(contact.phone) + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(_fmtPhone(contact.phone)) + '</a>' : 'Not on file — add') + '</div></div>' +
-            (contact.directPhone ? '<div class="profile-info-item"><div class="profile-info-label">Phone</div><div class="profile-info-value"><a href="' + _telHref(contact.directPhone) + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(_fmtPhone(contact.directPhone)) + '</a></div></div>' : '') +
-            '<div class="profile-info-item"><div class="profile-info-label">Email</div><div class="profile-info-value ' + (contact.email ? '' : 'muted') + '">' + (contact.email || 'Not on file — add') + '</div></div>' +
-            '<div class="profile-info-item"><div class="profile-info-label">Last contact</div><div class="profile-info-value ' + (contact.lastContact ? '' : 'muted') + '">' + (contact.lastContact ? contact.lastContact + ' (' + days + ' days ago)' : 'Never') + '</div></div>' +
+          '<div class="profile-section-title">Contact info <span class="sec-edit" title="Edit contact" onclick="openEditContactModal(\'' + contactId + '\')">✎</span></div>' +
+          '<div class="ci-two-col">' +
+            '<div class="profile-info-grid" style="grid-template-columns:1fr;">' +
+              '<div class="profile-info-item"><div class="profile-info-label">Mobile</div><div class="profile-info-value ' + (contact.phone ? '' : 'muted') + '">' + (contact.phone ? phoneLink(contact.phone) : 'Not on file — add') + '</div></div>' +
+              (contact.directPhone ? '<div class="profile-info-item"><div class="profile-info-label">Phone</div><div class="profile-info-value">' + phoneLink(contact.directPhone) + '</div></div>' : '') +
+              '<div class="profile-info-item"><div class="profile-info-label">Email</div><div class="profile-info-value ' + (contact.email ? '' : 'muted') + '">' + (contact.email ? '<a href="mailto:' + contact.email + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(contact.email) + '</a>' : 'Not on file — add') + '</div></div>' +
+              '<div class="profile-info-item"><div class="profile-info-label">Last contact</div><div class="profile-info-value ' + (contact.lastContact ? '' : 'muted') + '">' + (contact.lastContact ? contact.lastContact + ' (' + days + ' days ago)' : 'Never') + '</div></div>' +
+            '</div>' +
+            notesCol +
           '</div>' +
           touchWarning +
         '</div>';
@@ -5160,8 +5233,8 @@
       '</div>';
     }
 
-    var personalNotesBlock = '';
-    if (!isFirm && contact.personal) {
+    var personalNotesBlock = ''; // merged into the contact-info notes column
+    if (false && !isFirm && contact.personal) {
       var p = contact.personal;
       var hasStructured = p.livesIn || p.previouslyAt || p.family || p.interests;
       if (hasStructured || p.notes) {
@@ -5294,14 +5367,13 @@
           '</div>' +
         '</div>' +
         overviewBlock +
-        criteriaSection(contact) +
-        quickActions +
-        contactInfo +
+        (isFirm
+          ? criteriaSection(contact) + contactInfo
+          : contactInfo + criteriaSection(contact)) +
         linkedBlock +
         dealsBlock +
         dealHistoryBlock +
         dealNotesBlock +
-        personalNotesBlock +
         timelineBlock +
       '</div>';
   }
