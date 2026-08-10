@@ -1250,24 +1250,6 @@
   /* ════════════════════════════════════════════════════════════════
      CONTACTS SECTION
      ════════════════════════════════════════════════════════════════ */
-  .contacts-layout {
-    display: grid;
-    grid-template-columns: 380px 1fr;
-    gap: 24px;
-    align-items: start;
-    margin-top: 12px;
-  }
-  .contacts-list-pane {
-    background: white;
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-    overflow: hidden;
-    position: sticky;
-    top: 90px;
-    max-height: calc(100vh - 120px);
-    display: flex;
-    flex-direction: column;
-  }
   .contacts-list-header {
     display: flex;
     justify-content: space-between;
@@ -1327,24 +1309,6 @@
     color: white;
     border-color: var(--ink);
   }
-  .contacts-list {
-    overflow-y: auto;
-    flex: 1;
-  }
-  .contact-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    cursor: pointer;
-    border-bottom: 1px solid var(--line-soft);
-  }
-  .contact-row:hover { background: var(--cream); }
-  .contact-row.selected {
-    background: var(--sunrise-soft);
-    border-left: 3px solid var(--sunrise);
-    padding-left: 13px;
-  }
   .contact-avatar {
     width: 36px;
     height: 36px;
@@ -1363,28 +1327,6 @@
   .contact-avatar.firm {
     background: linear-gradient(135deg, var(--sky), var(--plum));
     border-radius: 8px;
-  }
-  .contact-row-body { flex: 1; min-width: 0; }
-  .contact-row-name {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ink);
-    line-height: 1.3;
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  .contact-row-name .role-emojis {
-    font-size: 11px;
-  }
-  .contact-row-meta {
-    font-size: 11px;
-    color: var(--ink-mute);
-    margin-top: 2px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .contacts-empty-state {
     background: white;
@@ -1410,9 +1352,6 @@
   }
 
   /* Profile view */
-  .contacts-profile-pane {
-    min-height: 400px;
-  }
   .profile-card {
     background: white;
     border: 1px solid var(--line);
@@ -1681,15 +1620,9 @@
   }
 
   @media (max-width: 1100px) {
-    .contacts-layout { grid-template-columns: 320px 1fr; }
-  }
-  @media (max-width: 900px) {
-    .contacts-layout { grid-template-columns: 1fr; }
-    .contacts-list-pane {
-      position: static;
-      max-height: none;
     }
-    .profile-info-grid { grid-template-columns: 1fr; }
+  @media (max-width: 900px) {
+        .profile-info-grid { grid-template-columns: 1fr; }
   }
   /* End Contacts styles */
 
@@ -2845,6 +2778,47 @@
   .pipeline-summary { display: flex; align-items: center; }
   .pipeline-summary-stats { display: flex; gap: 56px; align-items: center; }
 
+  .ct-view-btn {
+    border: none;
+    background: white;
+    padding: 7px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .ct-view-btn.active { background: var(--ink); color: var(--cream); }
+  .ct-table { width: 100%; border-collapse: collapse; background: white; border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+  .ct-table th {
+    text-align: left;
+    font-size: 9.5px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 700;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--cream);
+    white-space: nowrap;
+  }
+  .ct-table td {
+    padding: 8px 12px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--line-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 190px;
+  }
+  .ct-table tr:last-child td { border-bottom: none; }
+  .ct-table tbody tr { cursor: pointer; }
+  .ct-table tbody tr:hover { background: var(--cream); }
+  .ct-name { font-weight: 600; color: var(--ink); }
+  .ct-muted { color: var(--ink-mute); }
+  .ct-table a { color: var(--sunrise); text-decoration: none; }
+  .ct-table a:hover { text-decoration: underline; }
+
   .toast {
     position: fixed;
     bottom: 30px;
@@ -3300,51 +3274,38 @@
 
     <div class="work-tab" id="work-tab-contacts" style="display:none;">
 
-      <section class="contacts-layout">
-
-        <!-- LEFT: LIST -->
-        <aside class="contacts-list-pane">
-          <div class="contacts-list-header">
-            <div>
-              <h2 class="contacts-title">Contacts</h2>
-              <div class="contacts-count" id="contacts-count">0 people · 0 firms</div>
-            </div>
-            <div class="contacts-actions">
-              <button class="btn primary" onclick="openNewContactModal('person')">+ Person</button>
-              <button class="btn" onclick="openNewContactModal('firm')">+ Firm</button>
-            </div>
+      <section class="section">
+        <div class="contacts-list-header" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+          <div>
+            <h2 class="contacts-title">Contacts</h2>
+            <div class="contacts-count" id="contacts-count">0 people · 0 firms</div>
           </div>
-
-          <div class="contacts-search">
-            <input class="field-input contacts-search-input" id="contacts-search" placeholder="Search name, firm, note…" oninput="renderContactsList()" />
+          <div class="contacts-actions" style="display:flex;gap:8px;">
+            <button class="btn primary" onclick="openNewContactModal('person')">+ Person</button>
+            <button class="btn" onclick="openNewContactModal('firm')">+ Firm</button>
           </div>
+        </div>
 
-          <div class="contacts-filters">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+          <input class="field-input contacts-search-input" id="contacts-search" placeholder="Search name, firm, note…" style="max-width:280px;font-size:13px;padding:8px 12px;" oninput="renderContactsList()" />
+          <div style="display:flex;border:1px solid var(--line);border-radius:var(--r-pill);overflow:hidden;">
+            <button class="ct-view-btn active" id="ct-view-person" onclick="setContactsView('person', this)">People</button>
+            <button class="ct-view-btn" id="ct-view-firm" onclick="setContactsView('firm', this)">Firms</button>
+          </div>
+          <div class="contacts-filters" style="display:flex;gap:4px;flex-wrap:wrap;">
             <button class="filter-chip active" data-filter="all" onclick="setContactsFilter('all', this)">All</button>
-            <button class="filter-chip" data-filter="person" onclick="setContactsFilter('person', this)">People</button>
-            <button class="filter-chip" data-filter="firm" onclick="setContactsFilter('firm', this)">Firms</button>
-            <button class="filter-chip" data-filter="capital" onclick="setContactsFilter('capital', this)">💰 Capital</button>
-            <button class="filter-chip" data-filter="client" onclick="setContactsFilter('client', this)">⭐ Client</button>
             <button class="filter-chip" data-filter="developer" onclick="setContactsFilter('developer', this)">🏗️ Developer</button>
+            <button class="filter-chip" data-filter="equity" onclick="setContactsFilter('equity', this)">💰 Equity Provider</button>
+            <button class="filter-chip" data-filter="debt" onclick="setContactsFilter('debt', this)">🏦 Debt Provider</button>
+            <button class="filter-chip" data-filter="owneroperator" onclick="setContactsFilter('owneroperator', this)">🏢 Owner/Operator</button>
             <button class="filter-chip" data-filter="broker" onclick="setContactsFilter('broker', this)">🥊 Broker</button>
             <button class="filter-chip" data-filter="attorney" onclick="setContactsFilter('attorney', this)">⚖️ Attorney</button>
             <button class="filter-chip" data-filter="jll" onclick="setContactsFilter('jll', this)">🤝 JLL</button>
           </div>
+        </div>
 
-          <div class="contacts-list" id="contacts-list">
-            <!-- Contact rows injected -->
-          </div>
-        </aside>
-
-        <!-- RIGHT: PROFILE -->
-        <section class="contacts-profile-pane" id="contacts-profile">
-          <div class="contacts-empty-state">
-            <div class="empty-icon">👤</div>
-            <p class="empty-title">Select a contact</p>
-            <p class="empty-body">Pick anyone on the left to see their profile — contact info, activity timeline, linked deals, and every memo they appear in. Or use + Person or + Firm to add someone new.</p>
-          </div>
-        </section>
-
+        <div id="contacts-table-wrap"></div>
+        <div id="contacts-profile" style="display:none;"></div>
       </section>
 
     </div><!-- /#work-tab-contacts -->
@@ -4405,17 +4366,43 @@
   };
 
   var ROLE_META = {
-    capital:   { emoji: '💰', label: 'Capital' },
-    developer: { emoji: '🏗️', label: 'Developer' },
-    client:    { emoji: '⭐', label: 'Client' },
-    broker:    { emoji: '🥊', label: 'Broker' },
-    attorney:  { emoji: '⚖️', label: 'Attorney' },
-    jll:       { emoji: '🤝', label: 'JLL' },
-    owner:     { emoji: '🌴', label: 'Land Owner' }
+    developer:     { emoji: '🏗️', label: 'Developer' },
+    equity:        { emoji: '💰', label: 'Equity Provider' },
+    debt:          { emoji: '🏦', label: 'Debt Provider' },
+    owneroperator: { emoji: '🏢', label: 'Owner/Operator' },
+    broker:        { emoji: '🥊', label: 'Broker' },
+    attorney:      { emoji: '⚖️', label: 'Attorney' },
+    jll:           { emoji: '🤝', label: 'JLL' }
   };
+  // Legacy role keys from earlier data map forward; 'client' is retired (developers are clients)
+  function normalizeRoles(roles) {
+    var out = [];
+    (roles || []).forEach(function(r) {
+      var m = r === 'capital' ? 'equity' : r === 'owner' ? 'owneroperator' : r === 'client' ? null : r;
+      if (m && ROLE_META[m] && out.indexOf(m) < 0) out.push(m);
+    });
+    return out;
+  }
 
   var contactsFilter = 'all';
+  var contactsView = 'person';
   var selectedContactId = null;
+
+  window.setContactsView = function(view, el) {
+    contactsView = view;
+    document.querySelectorAll('.ct-view-btn').forEach(function(b) { b.classList.remove('active'); });
+    if (el) el.classList.add('active');
+    closeContactProfile();
+    renderContactsList();
+  };
+
+  window.closeContactProfile = function() {
+    selectedContactId = null;
+    var prof = document.getElementById('contacts-profile');
+    var table = document.getElementById('contacts-table-wrap');
+    if (prof) prof.style.display = 'none';
+    if (table) table.style.display = 'block';
+  };
 
   var currentWorkTab = 'today';
   window.setWorkTab = function(tab, el) {
@@ -4439,38 +4426,56 @@
   };
 
   window.renderContactsList = function() {
-    var list = document.getElementById('contacts-list');
-    if (!list) return;
+    var wrap = document.getElementById('contacts-table-wrap');
+    if (!wrap) return;
     var q = (document.getElementById('contacts-search').value || '').toLowerCase().trim();
 
     var filtered = CONTACTS.filter(function(c) {
-      if (contactsFilter === 'person' && c.kind !== 'person') return false;
-      if (contactsFilter === 'firm' && c.kind !== 'firm') return false;
-      if (['capital','developer','client','broker','attorney','jll','owner'].indexOf(contactsFilter) >= 0) {
+      if (c.kind !== contactsView) return false;
+      if (contactsFilter !== 'all') {
         if (!c.roles || c.roles.indexOf(contactsFilter) < 0) return false;
       }
       if (q) {
-        var haystack = (c.name + ' ' + (c.title || '') + ' ' + (c.notes || '') + ' ' + (c.description || '') + ' ' + (getFirmName(c) || '')).toLowerCase();
+        var haystack = (c.name + ' ' + (c.title || '') + ' ' + (c.notes || '') + ' ' + (c.description || '') + ' ' + (c.email || '') + ' ' + (c.city || '') + ' ' + (getFirmName(c) || '')).toLowerCase();
         if (haystack.indexOf(q) < 0) return false;
       }
       return true;
     });
+    filtered.sort(function(a, b) { return a.name.localeCompare(b.name); });
 
-    // Sort: firms first alphabetically, then people alphabetically
-    filtered.sort(function(a, b) {
-      if (a.kind !== b.kind) return a.kind === 'firm' ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-
-    list.innerHTML = filtered.length === 0
-      ? '<div style="padding:24px 16px;text-align:center;color:var(--ink-mute);font-size:12px;font-style:italic;">No contacts match.</div>'
-      : filtered.map(renderContactRow).join('');
-
-    // Selection highlight
-    if (selectedContactId) {
-      var sel = list.querySelector('[data-contact-id="' + selectedContactId + '"]');
-      if (sel) sel.classList.add('selected');
+    var head, rows;
+    if (contactsView === 'person') {
+      head = '<tr><th>Name</th><th>Company Name</th><th>Title</th><th>Email</th><th>Phone</th><th>Mobile</th><th>City</th><th>State</th><th>Country</th></tr>';
+      rows = filtered.map(function(c) {
+        return '<tr onclick="selectContact(\'' + c.id + '\')">' +
+          '<td class="ct-name">' + escapeHtml(c.name) + roleEmojis(c) + '</td>' +
+          '<td>' + escapeHtml(getFirmName(c) || '—') + '</td>' +
+          '<td class="ct-muted">' + escapeHtml(c.title || '—') + '</td>' +
+          '<td>' + (c.email ? '<a href="mailto:' + c.email + '" onclick="event.stopPropagation()">' + escapeHtml(c.email) + '</a>' : '<span class="ct-muted">—</span>') + '</td>' +
+          '<td>' + (c.directPhone ? '<a href="tel:' + c.directPhone.replace(/\D/g, '') + '" onclick="event.stopPropagation()">' + escapeHtml(c.directPhone) + '</a>' : '<span class="ct-muted">—</span>') + '</td>' +
+          '<td>' + (c.phone ? '<a href="tel:' + c.phone.replace(/\D/g, '') + '" onclick="event.stopPropagation()">' + escapeHtml(c.phone) + '</a>' : '<span class="ct-muted">—</span>') + '</td>' +
+          '<td class="ct-muted">' + escapeHtml(c.city || '—') + '</td>' +
+          '<td class="ct-muted">' + escapeHtml(c.state || '—') + '</td>' +
+          '<td class="ct-muted">' + escapeHtml(c.country || '—') + '</td>' +
+        '</tr>';
+      });
+    } else {
+      head = '<tr><th>Company Name</th><th>Website</th><th>Headquarter City</th><th>Headquarter State</th><th>Headquarter Country</th></tr>';
+      rows = filtered.map(function(c) {
+        var site = c.website ? c.website.replace(/^https?:\/\//, '') : '';
+        return '<tr onclick="selectContact(\'' + c.id + '\')">' +
+          '<td class="ct-name">' + escapeHtml(c.name) + roleEmojis(c) + '</td>' +
+          '<td>' + (site ? '<a href="https://' + escapeHtml(site) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + escapeHtml(site) + '</a>' : '<span class="ct-muted">—</span>') + '</td>' +
+          '<td class="ct-muted">' + escapeHtml(c.city || '—') + '</td>' +
+          '<td class="ct-muted">' + escapeHtml(c.state || '—') + '</td>' +
+          '<td class="ct-muted">' + escapeHtml(c.country || '—') + '</td>' +
+        '</tr>';
+      });
     }
+
+    wrap.innerHTML = filtered.length === 0
+      ? '<div style="background:white;border:1.5px dashed var(--line);border-radius:var(--r-md);padding:26px;text-align:center;color:var(--ink-mute);font-size:12px;">No ' + (contactsView === 'person' ? 'people' : 'firms') + ' match.</div>'
+      : '<table class="ct-table"><thead>' + head + '</thead><tbody>' + rows.join('') + '</tbody></table>';
 
     var totalPeople = CONTACTS.filter(function(c) { return c.kind === 'person'; }).length;
     var totalFirms = CONTACTS.filter(function(c) { return c.kind === 'firm'; }).length;
@@ -4498,26 +4503,15 @@
     }).join('') + '</span>';
   }
 
-  function renderContactRow(contact) {
-    var avatarClass = contact.kind === 'firm' ? 'firm' : 'person';
-    var meta = contact.kind === 'firm'
-      ? escapeHtml(contact.firmType || '') + (contact.hq ? ' · ' + escapeHtml(contact.hq) : '')
-      : (contact.title ? escapeHtml(contact.title) : '') + (getFirmName(contact) ? ' · ' + escapeHtml(getFirmName(contact)) : '');
-    return '<div class="contact-row" data-contact-id="' + contact.id + '" onclick="selectContact(\'' + contact.id + '\')">' +
-      '<div class="contact-avatar ' + avatarClass + '">' + initials(contact.name) + '</div>' +
-      '<div class="contact-row-body">' +
-        '<div class="contact-row-name">' + escapeHtml(contact.name) + roleEmojis(contact) + '</div>' +
-        '<div class="contact-row-meta">' + meta + '</div>' +
-      '</div>' +
-    '</div>';
-  }
-
+  
   window.selectContact = function(contactId) {
     selectedContactId = contactId;
-    document.querySelectorAll('.contact-row').forEach(function(r) { r.classList.remove('selected'); });
-    var row = document.querySelector('[data-contact-id="' + contactId + '"]');
-    if (row) row.classList.add('selected');
+    var prof = document.getElementById('contacts-profile');
+    var table = document.getElementById('contacts-table-wrap');
+    if (table) table.style.display = 'none';
+    if (prof) prof.style.display = 'block';
     renderContactProfile(contactId);
+    window.scrollTo(0, 0);
   };
 
   function daysSince(dateStr) {
@@ -4839,7 +4833,8 @@
     }
 
     pane.innerHTML =
-      '<div class="profile-card">' +
+      '<div class="profile-back" onclick="closeContactProfile();renderContactsList();" style="border-radius:var(--r-md) var(--r-md) 0 0;border:1px solid var(--line);border-bottom:none;">← Back to contacts</div>' +
+      '<div class="profile-card" style="border-radius:0 0 var(--r-md) var(--r-md);">' +
         backLink +
         '<div class="profile-header">' +
           headerLogBtn +
@@ -5066,10 +5061,10 @@
     var c = CONTACTS.find(function(x) { return x.id === contactId; });
     if (!c) return;
     var isPerson = c.kind === 'person';
-    var ROLES = ['capital', 'developer', 'client', 'broker', 'attorney', 'jll', 'owner'];
+    var ROLES = Object.keys(ROLE_META);
     var roleBoxes = ROLES.map(function(r) {
       var checked = (c.roles || []).indexOf(r) >= 0 ? ' checked' : '';
-      return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 10px 6px 0;"><input type="checkbox" value="' + r + '"' + checked + ' /> ' + r + '</label>';
+      return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 10px 6px 0;"><input type="checkbox" value="' + r + '"' + checked + ' /> ' + ROLE_META[r].emoji + ' ' + ROLE_META[r].label + '</label>';
     }).join('');
     var firmOpts = '<option value="">— none —</option>' + CONTACTS.filter(function(x) { return x.kind === 'firm'; })
       .map(function(f) { return '<option value="' + f.id + '"' + (c.firmId === f.id ? ' selected' : '') + '>' + escapeHtml(f.name) + '</option>'; }).join('');
@@ -5082,9 +5077,15 @@
           '<div class="field"><label class="field-label">Firm</label><select class="field-select" id="ec-firm">' + firmOpts + '</select></div>' +
         '</div>' +
         '<div class="field-row">' +
-          '<div class="field"><label class="field-label">Phone</label><input class="field-input" id="ec-phone" value="' + escapeHtml(c.phone || '') + '" /></div>' +
-          '<div class="field"><label class="field-label">Email</label><input class="field-input" id="ec-email" value="' + escapeHtml(c.email || '') + '" /></div>' +
+          '<div class="field"><label class="field-label">Mobile</label><input class="field-input" id="ec-phone" value="' + escapeHtml(c.phone || '') + '" /></div>' +
+          '<div class="field"><label class="field-label">Phone (office)</label><input class="field-input" id="ec-officephone" value="' + escapeHtml(c.directPhone || '') + '" /></div>' +
         '</div>' +
+        '<div class="field"><label class="field-label">Email</label><input class="field-input" id="ec-email" value="' + escapeHtml(c.email || '') + '" /></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">City</label><input class="field-input" id="ec-city" value="' + escapeHtml(c.city || '') + '" /></div>' +
+          '<div class="field"><label class="field-label">State</label><input class="field-input" id="ec-state" value="' + escapeHtml(c.state || '') + '" /></div>' +
+        '</div>' +
+        '<div class="field"><label class="field-label">Country</label><input class="field-input" id="ec-country" value="' + escapeHtml(c.country || '') + '" /></div>' +
         '<div class="field"><label class="field-label">Roles</label><div id="ec-roles">' + roleBoxes + '</div></div>' +
         '<div class="field"><label class="field-label">Notes</label><textarea class="field-input" id="ec-notes" style="min-height:60px;">' + escapeHtml(c.notes || '') + '</textarea></div>';
     } else {
@@ -5092,8 +5093,13 @@
         '<div class="field"><label class="field-label required">Firm name</label><input class="field-input" id="ec-name" value="' + escapeHtml(c.name) + '" /></div>' +
         '<div class="field-row">' +
           '<div class="field"><label class="field-label">Firm type</label><input class="field-input" id="ec-firmtype" value="' + escapeHtml(c.firmType || '') + '" placeholder="e.g. Equity · Family Office" /></div>' +
-          '<div class="field"><label class="field-label">HQ</label><input class="field-input" id="ec-hq" value="' + escapeHtml(c.hq || '') + '" /></div>' +
+          '<div class="field"><label class="field-label">Website</label><input class="field-input" id="ec-website" value="' + escapeHtml(c.website || '') + '" placeholder="e.g. mastcapital.com" /></div>' +
         '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">Headquarter City</label><input class="field-input" id="ec-city" value="' + escapeHtml(c.city || '') + '" /></div>' +
+          '<div class="field"><label class="field-label">Headquarter State</label><input class="field-input" id="ec-state" value="' + escapeHtml(c.state || '') + '" /></div>' +
+        '</div>' +
+        '<div class="field"><label class="field-label">Headquarter Country</label><input class="field-input" id="ec-country" value="' + escapeHtml(c.country || '') + '" /></div>' +
         '<div class="field"><label class="field-label">Roles</label><div id="ec-roles">' + roleBoxes + '</div></div>' +
         '<div class="field"><label class="field-label">Description / notes</label><textarea class="field-input" id="ec-notes" style="min-height:60px;">' + escapeHtml(c.notes || c.description || '') + '</textarea></div>';
     }
@@ -5123,15 +5129,23 @@
     c.roles = roles;
     c.notes = document.getElementById('ec-notes').value.trim();
     var fields = { name: name, roles: roles, notes: c.notes || null };
+    c.city = document.getElementById('ec-city').value.trim();
+    c.state = document.getElementById('ec-state').value.trim();
+    c.country = document.getElementById('ec-country').value.trim();
+    fields.city = c.city || null;
+    fields.state = c.state || null;
+    fields.country = c.country || null;
     if (c.kind === 'person') {
       c.title = document.getElementById('ec-title').value.trim();
       var oldFirmId = c.firmId;
       c.firmId = document.getElementById('ec-firm').value || null;
       c.phone = document.getElementById('ec-phone').value.trim();
+      c.directPhone = document.getElementById('ec-officephone').value.trim();
       c.email = document.getElementById('ec-email').value.trim();
       fields.title = c.title || null;
       fields.firm_id = c.firmId;
       fields.phone = c.phone || null;
+      fields.direct_phone = c.directPhone || null;
       fields.email = c.email || null;
       if (oldFirmId !== c.firmId) {
         CONTACTS.forEach(function(f) {
@@ -5143,10 +5157,10 @@
       }
     } else {
       c.firmType = document.getElementById('ec-firmtype').value.trim();
-      c.hq = document.getElementById('ec-hq').value.trim();
+      c.website = document.getElementById('ec-website').value.trim().replace(/^https?:\/\//, '');
       c.description = c.notes;
       fields.firm_type = c.firmType || null;
-      fields.hq = c.hq || null;
+      fields.website = c.website || null;
     }
     if (window._db && window._db.updateContact) window._db.updateContact(contactId, fields);
     document.getElementById('modal-backdrop').classList.remove('show');
@@ -5439,13 +5453,15 @@
         return { id: r.id, kind: 'person', name: r.name, title: r.title || '', focus: r.focus || '',
                  office: r.office || '', firmId: r.firm_id || null, phone: r.phone || '',
                  directPhone: r.direct_phone || '', email: r.email || '',
+                 city: r.city || '', state: r.state || '', country: r.country || '',
                  lastContact: r.last_contact || '', personal: r.personal || null,
-                 roles: r.roles || [], notes: r.notes || '',
+                 roles: normalizeRoles(r.roles), notes: r.notes || '',
                  relationshipStrength: r.relationship_strength || '' };
       }
       return { id: r.id, kind: 'firm', name: r.name, firmType: r.firm_type || '', hq: r.hq || '',
                website: r.website || '', offices: r.offices || [], founded: r.founded || null,
-               aum: r.aum || '', criteria: r.criteria || null, roles: r.roles || [],
+               city: r.city || '', state: r.state || '', country: r.country || '',
+               aum: r.aum || '', criteria: r.criteria || null, roles: normalizeRoles(r.roles),
                notes: r.notes || '', description: r.notes || '',
                relationshipStrength: r.relationship_strength || '', linkedContacts: [] };
     });
@@ -6712,6 +6728,7 @@ window._db = {
     } else {
       payload.firm_type = c.firmType || null;
       payload.hq = c.hq || null;
+      payload.website = c.website || null;
       payload.relationship_strength = c.relationshipStrength || null;
     }
     var res = await sb.from('contacts').insert(payload).select().single();
