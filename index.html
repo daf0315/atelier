@@ -5551,6 +5551,31 @@
     _renderLogForm(contactId, mode);
   };
 
+  function _dealFeedbackRows(contactId) {
+    return '<div class="log-form-row">' +
+        '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Related deal</label>' +
+        '<select id="log-deal-' + contactId + '" onchange="logDealChanged(\'' + contactId + '\')">' +
+          '<option value="">— none —</option>' +
+          DEALS.filter(function(dl) { return dl.status !== 'closed' && dl.status !== 'lost'; })
+            .sort(function(a, b) { return a.name.localeCompare(b.name); })
+            .map(function(dl) { return '<option value="' + dl.id + '">' + escapeHtml(dl.name) + '</option>'; }).join('') +
+        '</select>' +
+      '</div>' +
+      '<div class="log-form-row" id="log-outcome-row-' + contactId + '" style="display:none;">' +
+        '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Market outcome</label>' +
+        '<select id="log-outcome-' + contactId + '" onchange="logOutcomeChanged(\'' + contactId + '\')">' +
+          '<option value="">Just logging — no outcome</option>' +
+          Object.keys(OUTCOME_META).map(function(k) {
+            return '<option value="' + k + '">' + OUTCOME_META[k].icon + ' ' + OUTCOME_META[k].label + '</option>';
+          }).join('') +
+        '</select>' +
+      '</div>' +
+      '<div class="log-form-row" id="log-amount-row-' + contactId + '" style="display:none;">' +
+        '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Amount</label>' +
+        '<input type="text" placeholder="e.g. $12.5M" id="log-amount-' + contactId + '" />' +
+      '</div>';
+  }
+
   function _renderLogForm(contactId, mode) {
     var container = document.getElementById('log-form-container-' + contactId);
     if (!container) return;
@@ -5574,28 +5599,7 @@
               '<option value="meeting">Meeting</option><option value="note">Note</option>' +
             '</select>' +
           '</div>' +
-          '<div class="log-form-row">' +
-            '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Related deal</label>' +
-            '<select id="log-deal-' + contactId + '" onchange="logDealChanged(\'' + contactId + '\')">' +
-              '<option value="">— none —</option>' +
-              DEALS.filter(function(dl) { return dl.status !== 'closed' && dl.status !== 'lost'; })
-                .sort(function(a, b) { return a.name.localeCompare(b.name); })
-                .map(function(dl) { return '<option value="' + dl.id + '">' + escapeHtml(dl.name) + '</option>'; }).join('') +
-            '</select>' +
-          '</div>' +
-          '<div class="log-form-row" id="log-outcome-row-' + contactId + '" style="display:none;">' +
-            '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Market outcome</label>' +
-            '<select id="log-outcome-' + contactId + '" onchange="logOutcomeChanged(\'' + contactId + '\')">' +
-              '<option value="">Just logging — no outcome</option>' +
-              Object.keys(OUTCOME_META).map(function(k) {
-                return '<option value="' + k + '">' + OUTCOME_META[k].icon + ' ' + OUTCOME_META[k].label + '</option>';
-              }).join('') +
-            '</select>' +
-          '</div>' +
-          '<div class="log-form-row" id="log-amount-row-' + contactId + '" style="display:none;">' +
-            '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Amount</label>' +
-            '<input type="text" placeholder="e.g. $12.5M" id="log-amount-' + contactId + '" />' +
-          '</div>' +
+          _dealFeedbackRows(contactId) +
           '<div class="log-form-row">' +
             '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Date</label>' +
             '<input type="date" value="' + today + '" id="log-date-' + contactId + '" />' +
@@ -5632,7 +5636,9 @@
           '</div>' +
           '<textarea class="live-call-textarea" id="log-body-' + contactId + '" ' +
             'placeholder="Jot as you go. Names, numbers, next steps. Don\'t worry about grammar — just capture what matters. You can shape it into a memo when the call ends."></textarea>' +
-          '<div class="log-form-row" style="margin-top:10px;">' +
+          '<div style="margin-top:10px;"></div>' +
+          _dealFeedbackRows(contactId) +
+          '<div class="log-form-row">' +
             '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Follow up by</label>' +
             '<input type="date" id="log-followup-' + contactId + '" title="If set, creates an Owed response task on Today" />' +
           '</div>' +
@@ -6639,11 +6645,21 @@
           '<div class="deal-history-list">' + activityHtml + '</div>' +
           '<div class="log-form" style="margin-top:12px;">' +
             '<div class="log-form-row">' +
-              '<input type="text" id="ma-investor-' + dealId + '" list="ma-contacts-list" placeholder="Investor / firm name — pick a contact to link them" style="grid-column:1/-1;" />' +
-              '<datalist id="ma-contacts-list">' +
-                CONTACTS.slice().sort(function(a, b) { return a.name.localeCompare(b.name); })
-                  .map(function(c) { return '<option value="' + escapeHtml(c.name) + '"></option>'; }).join('') +
-              '</datalist>' +
+              '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Company</label>' +
+              '<select id="ma-company-' + dealId + '" onchange="maCompanyChanged(\'' + dealId + '\')">' +
+                '<option value="">— select company —</option>' +
+                CONTACTS.filter(function(c) { return c.kind === 'firm'; })
+                  .sort(function(a, b) { return a.name.localeCompare(b.name); })
+                  .map(function(c) { return '<option value="' + c.id + '">' + escapeHtml(c.name) + '</option>'; }).join('') +
+                '<option value="__other__">Other — not in contacts…</option>' +
+              '</select>' +
+            '</div>' +
+            '<div class="log-form-row" id="ma-person-row-' + dealId + '" style="display:none;">' +
+              '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Investor name</label>' +
+              '<select id="ma-person-' + dealId + '"><option value="">— no specific person —</option></select>' +
+            '</div>' +
+            '<div class="log-form-row" id="ma-free-row-' + dealId + '" style="display:none;">' +
+              '<input type="text" id="ma-investor-free-' + dealId + '" placeholder="Investor / firm name" style="grid-column:1/-1;" />' +
             '</div>' +
             '<div class="log-form-row">' +
               '<select id="ma-outcome-' + dealId + '">' + outcomeOpts + '</select>' +
@@ -6793,16 +6809,59 @@
     showToast('Note saved', body.slice(0, 60));
   };
 
+  window.maCompanyChanged = function(dealId) {
+    var companySel = document.getElementById('ma-company-' + dealId);
+    var personRow = document.getElementById('ma-person-row-' + dealId);
+    var freeRow = document.getElementById('ma-free-row-' + dealId);
+    var personSel = document.getElementById('ma-person-' + dealId);
+    if (!companySel) return;
+    var v = companySel.value;
+    if (v === '__other__') {
+      if (personRow) personRow.style.display = 'none';
+      if (freeRow) freeRow.style.display = '';
+      return;
+    }
+    if (freeRow) freeRow.style.display = 'none';
+    if (!v) { if (personRow) personRow.style.display = 'none'; return; }
+    var firm = CONTACTS.find(function(c) { return c.id === v; });
+    var people = CONTACTS.filter(function(c) { return c.kind === 'person' && c.firmId === v; })
+      .sort(function(a, b) { return a.name.localeCompare(b.name); });
+    if (personSel) {
+      personSel.innerHTML = '<option value="">— no specific person —</option>' +
+        people.map(function(p) { return '<option value="' + p.id + '">' + escapeHtml(p.name) + '</option>'; }).join('');
+    }
+    if (personRow) personRow.style.display = '';
+  };
+
   window.saveMarketActivity = function(dealId) {
-    var investor = document.getElementById('ma-investor-' + dealId).value.trim();
-    if (!investor) { alert('Investor name is required.'); return; }
-    // If the typed name matches a contact, link the record — it then shows in their Deal history too
-    var matched = CONTACTS.find(function(c) { return c.name.toLowerCase() === investor.toLowerCase(); });
+    var companySel = document.getElementById('ma-company-' + dealId);
+    var companyVal = companySel ? companySel.value : '';
+    var investor = '', linkedId = null;
+    if (companyVal === '__other__') {
+      var freeEl = document.getElementById('ma-investor-free-' + dealId);
+      investor = freeEl ? freeEl.value.trim() : '';
+      if (!investor) { alert('Enter the investor or firm name.'); return; }
+    } else if (companyVal) {
+      var firm = CONTACTS.find(function(c) { return c.id === companyVal; });
+      var personSel = document.getElementById('ma-person-' + dealId);
+      var personId = personSel ? personSel.value : '';
+      if (personId) {
+        var person = CONTACTS.find(function(c) { return c.id === personId; });
+        investor = (person ? person.name : '') + (firm ? ' · ' + firm.name : '');
+        linkedId = personId; // person link → shows on the person AND rolls up to the firm
+      } else {
+        investor = firm ? firm.name : '';
+        linkedId = companyVal; // firm-level link
+      }
+    } else {
+      alert('Pick the company (or choose Other for someone not in your contacts).');
+      return;
+    }
     var entry = {
       id: 'm' + Date.now().toString(36),
       dealId: dealId,
       investor: investor,
-      contactId: matched ? matched.id : null,
+      contactId: linkedId,
       dateShown: document.getElementById('ma-date-' + dealId).value,
       outcome: document.getElementById('ma-outcome-' + dealId).value,
       amount: document.getElementById('ma-amount-' + dealId).value.trim(),
