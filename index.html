@@ -2778,6 +2778,25 @@
   .pipeline-summary { display: flex; align-items: center; }
   .pipeline-summary-stats { display: flex; gap: 56px; align-items: center; }
 
+  .tl-expandable { cursor: pointer; }
+  .tl-expandable:hover { background: var(--cream); border-radius: var(--r-sm); }
+  .tl-summary { font-size: 12px; color: var(--ink-soft); margin-top: 3px; }
+  .tl-more { color: var(--sunrise); font-size: 11px; font-weight: 600; }
+  .tl-full { font-size: 12px; color: var(--ink-soft); margin-top: 4px; white-space: pre-wrap; }
+  .tl-deal-chip {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--sunrise);
+    background: var(--sunrise-soft);
+    border-radius: var(--r-pill);
+    padding: 1px 8px;
+    margin-left: 6px;
+    cursor: pointer;
+  }
+  .timeline-tag.tag-offer { background: var(--moss-soft, #E4EFE7); color: var(--moss, #2F7A4F); }
+  .timeline-item.offer { border-left-color: var(--moss, #2F7A4F); }
+
   .sec-edit {
     display: inline-block;
     margin-left: 8px;
@@ -4862,6 +4881,7 @@
         rows += row('Min keys', tc.minKeys || '');
         rows += row('Deal size', (tc.minDeal || tc.maxDeal) ? (tc.minDeal || 'Any') + ' – ' + (tc.maxDeal || 'Any') : '');
         rows += row('Product', (tc.products && tc.products.length) ? tc.products.join(', ') : '');
+        rows += row('Geography', tc.geography || '');
         if (t === 'Land' && tc.devTypes && tc.devTypes.length) {
           rows += '<div style="font-size:11px;color:var(--ink-mute);margin-top:6px;">Builds</div>';
           tc.devTypes.forEach(function(dt) {
@@ -4894,6 +4914,13 @@
     var owner = _criteriaOwner(c);
     _critOwnerId = owner.id;
     _critDraft = JSON.parse(JSON.stringify(_critV2(owner.criteria)));
+    // Geography now lives per property type; carry any old global value into types that lack one
+    if (_critDraft.geography) {
+      Object.keys(_critDraft.types).forEach(function(t) {
+        if (!_critDraft.types[t].geography) _critDraft.types[t].geography = _critDraft.geography;
+      });
+      _critDraft.geography = '';
+    }
     var html =
       '<div class="modal-header"><div class="modal-eyebrow">Investment criteria</div>' +
       '<div class="modal-title" style="font-size:20px;">' + escapeHtml(owner.name) + '</div></div>' +
@@ -4934,7 +4961,9 @@
           }).join('') +
         '</div>' +
         (TYPE_FIELDS[t][2] ? '<div class="field"><label class="field-label">' + TYPE_FIELDS[t][2].label + '</label>' +
-          '<input class="field-input" data-crit-field="' + t + '|' + TYPE_FIELDS[t][2].k + '" value="' + escapeHtml(tc[TYPE_FIELDS[t][2].k] || '') + '" placeholder="' + TYPE_FIELDS[t][2].ph + '" onchange="critCollectFields()" /></div>' : '');
+          '<input class="field-input" data-crit-field="' + t + '|' + TYPE_FIELDS[t][2].k + '" value="' + escapeHtml(tc[TYPE_FIELDS[t][2].k] || '') + '" placeholder="' + TYPE_FIELDS[t][2].ph + '" onchange="critCollectFields()" /></div>' : '') +
+        '<div class="field"><label class="field-label">Target geography</label>' +
+          '<input class="field-input" data-crit-field="' + t + '|geography" value="' + escapeHtml(tc.geography || '') + '" placeholder="e.g. East Broward, Miami urban core" onchange="critCollectFields()" /></div>';
 
       if (t === 'Multifamily') {
         html += '<div class="field"><label class="field-label">Product</label><div>' +
@@ -4972,9 +5001,7 @@
       html += '</div>';
     });
 
-    html += '<div class="field"><label class="field-label">Target geography</label>' +
-      '<input class="field-input" id="cm-geo" value="' + escapeHtml(d.geography || '') + '" placeholder="e.g. East Broward, Miami urban core" onchange="critCollectFields()" /></div>' +
-      '<div class="field"><label class="field-label">Notes</label>' +
+    html += '<div class="field"><label class="field-label">Notes</label>' +
       '<input class="field-input" id="cm-notes" value="' + escapeHtml(d.notes || '') + '" placeholder="Anything else about their appetite" onchange="critCollectFields()" /></div>';
 
     body.innerHTML = html;
@@ -4995,9 +5022,7 @@
         land.devDetails[p[0]][p[1]] = inp.value.trim();
       }
     });
-    var geo = document.getElementById('cm-geo');
     var notes = document.getElementById('cm-notes');
-    if (geo) d.geography = geo.value.trim();
     if (notes) d.notes = notes.value.trim();
   };
 
@@ -5141,6 +5166,7 @@
               '<div class="profile-info-item"><div class="profile-info-label">Mobile</div><div class="profile-info-value ' + (contact.phone ? '' : 'muted') + '">' + (contact.phone ? phoneLink(contact.phone) : 'Not on file — add') + '</div></div>' +
               (contact.directPhone ? '<div class="profile-info-item"><div class="profile-info-label">Phone</div><div class="profile-info-value">' + phoneLink(contact.directPhone) + '</div></div>' : '') +
               '<div class="profile-info-item"><div class="profile-info-label">Email</div><div class="profile-info-value ' + (contact.email ? '' : 'muted') + '">' + (contact.email ? '<a href="mailto:' + contact.email + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(contact.email) + '</a>' : 'Not on file — add') + '</div></div>' +
+              '<div class="profile-info-item"><div class="profile-info-label">Location</div><div class="profile-info-value ' + ((contact.city || contact.state || contact.country) ? '' : 'muted') + '">' + ([contact.city, contact.state, contact.country].filter(Boolean).map(escapeHtml).join(', ') || 'Not on file — add') + '</div></div>' +
               '<div class="profile-info-item"><div class="profile-info-label">Last contact</div><div class="profile-info-value ' + (contact.lastContact ? '' : 'muted') + '">' + (contact.lastContact ? contact.lastContact + ' (' + days + ' days ago)' : 'Never') + '</div></div>' +
             '</div>' +
             notesCol +
@@ -5309,9 +5335,19 @@
       (events.length === 0
         ? '<div class="profile-info-value muted">Nothing logged yet — use the Log button above to add your first interaction.</div>'
         : '<div class="timeline">' + events.map(function(ev) {
-            return '<div class="timeline-item ' + ev.type + '">' +
+            var dispType = ev.type === 'memo' ? 'note' : ev.type;
+            var summary = _summarizeBody(ev.body);
+            var expandable = ev.body && ev.body.length > summary.length;
+            var deal = ev.dealId ? DEALS.find(function(dl) { return dl.id === ev.dealId; }) : null;
+            var dealChip = deal ? ' <a class="tl-deal-chip" onclick="event.stopPropagation();openDealPage(\'' + deal.id + '\')">🏗 ' + escapeHtml(deal.name) + '</a>' : '';
+            return '<div class="timeline-item ' + dispType + (expandable ? ' tl-expandable' : '') + '"' + (expandable ? ' onclick="toggleTimelineItem(this)"' : '') + '>' +
               '<div class="timeline-date">' + (ev.date || 'undated') + '</div>' +
-              '<div class="timeline-content"><span class="timeline-tag tag-' + ev.type + '">' + ev.type + '</span><strong>' + escapeHtml(ev.title) + '</strong>' + (ev.body ? ' — ' + escapeHtml(ev.body) : '') + '</div>' +
+              '<div class="timeline-content">' +
+                '<span class="timeline-tag tag-' + dispType + '">' + (dispType === 'offer' ? '📤 offer' : dispType) + '</span>' +
+                '<strong>' + escapeHtml(ev.title) + '</strong>' + dealChip +
+                (summary ? '<div class="tl-summary">' + escapeHtml(summary) + (expandable ? ' <span class="tl-more">more…</span>' : '') + '</div>' : '') +
+                (expandable ? '<div class="tl-full" style="display:none;">' + escapeHtml(ev.body) + '</div>' : '') +
+              '</div>' +
             '</div>';
           }).join('') + '</div>') +
       '</div>' +
@@ -5325,6 +5361,8 @@
     var overviewBlock = '';
     if (isFirm) {
       var overviewItems = [];
+      var hqLoc = [contact.city, contact.state, contact.country].filter(Boolean).join(', ');
+      if (hqLoc) overviewItems.push({ label: 'Headquarters', value: escapeHtml(hqLoc) });
       if (contact.website) {
         var url = contact.website.indexOf('http') === 0 ? contact.website : 'https://' + contact.website;
         overviewItems.push({ label: 'Website', value: '<a href="' + url + '" target="_blank">' + escapeHtml(contact.website) + '</a>' });
@@ -5380,6 +5418,24 @@
 
   var _liveCallTimers = {};
 
+  function _summarizeBody(body) {
+    if (!body) return '';
+    var clean = String(body).replace(/\s+/g, ' ').trim();
+    if (clean.length <= 120) return clean;
+    var cut = clean.slice(0, 120);
+    var lastSpace = cut.lastIndexOf(' ');
+    return (lastSpace > 60 ? cut.slice(0, lastSpace) : cut) + '…';
+  }
+
+  window.toggleTimelineItem = function(el) {
+    var full = el.querySelector('.tl-full');
+    var summary = el.querySelector('.tl-summary');
+    if (!full) return;
+    var open = full.style.display !== 'none';
+    full.style.display = open ? 'none' : 'block';
+    if (summary) summary.style.display = open ? 'block' : 'none';
+  };
+
   window.openLogForm = function(contactId) {
     var container = document.getElementById('log-form-container-' + contactId);
     if (!container) return;
@@ -5389,6 +5445,12 @@
       return;
     }
     _renderLogForm(contactId, 'quick');
+  };
+
+  window.logTypeChanged = function(contactId) {
+    var typeEl = document.getElementById('log-type-' + contactId);
+    var amtRow = document.getElementById('log-amount-row-' + contactId);
+    if (amtRow) amtRow.style.display = (typeEl && typeEl.value === 'offer') ? '' : 'none';
   };
 
   window.setLogMode = function(contactId, mode) {
@@ -5414,11 +5476,24 @@
           toggle +
           '<div class="log-form-row">' +
             '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Type</label>' +
-            '<select id="log-type-' + contactId + '">' +
+            '<select id="log-type-' + contactId + '" onchange="logTypeChanged(\'' + contactId + '\')">' +
               '<option value="call">Call</option><option value="email">Email</option>' +
               '<option value="meeting">Meeting</option><option value="note">Note</option>' +
-              '<option value="memo">Memo</option>' +
+              '<option value="offer">📤 Offer submitted</option>' +
             '</select>' +
+          '</div>' +
+          '<div class="log-form-row">' +
+            '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Related deal</label>' +
+            '<select id="log-deal-' + contactId + '">' +
+              '<option value="">— none —</option>' +
+              DEALS.filter(function(dl) { return dl.status !== 'closed' && dl.status !== 'lost'; })
+                .sort(function(a, b) { return a.name.localeCompare(b.name); })
+                .map(function(dl) { return '<option value="' + dl.id + '">' + escapeHtml(dl.name) + '</option>'; }).join('') +
+            '</select>' +
+          '</div>' +
+          '<div class="log-form-row" id="log-amount-row-' + contactId + '" style="display:none;">' +
+            '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Offer amount</label>' +
+            '<input type="text" placeholder="e.g. $12.5M" id="log-amount-' + contactId + '" />' +
           '</div>' +
           '<div class="log-form-row">' +
             '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Date</label>' +
@@ -5505,11 +5580,35 @@
     var followUpEl = document.getElementById('log-followup-' + contactId);
     var followUpBy = followUpEl ? followUpEl.value : '';
     if (!title) { alert('A short title is required.'); return; }
+    var dealEl = document.getElementById('log-deal-' + contactId);
+    var dealId = dealEl ? (dealEl.value || null) : null;
+    var amountEl = document.getElementById('log-amount-' + contactId);
+    var amount = amountEl ? amountEl.value.trim() : '';
+    if (type === 'offer' && !dealId) { alert('An offer needs a related deal — pick one from the list.'); return; }
     _stopLiveTimer(contactId);
-    var logEntry = { contactId: contactId, type: type, date: date, title: title, body: body };
+    var logEntry = { contactId: contactId, dealId: dealId, type: type, date: date, title: title, body: body };
     TIMELINE.unshift(logEntry);
     if (window._db && window._db.insertContactNote) {
       window._db.insertContactNote(logEntry).then(function(row) { if (row) logEntry.id = row.id; });
+    }
+    // An offer log is market intelligence: it lands on the deal's Market Activity too, contact-linked
+    if (type === 'offer' && dealId) {
+      var oc = CONTACTS.find(function(x) { return x.id === contactId; });
+      var investorName = oc ? (oc.kind === 'person' ? (getFirmName(oc) || oc.name) : oc.name) : 'Unknown';
+      var maEntry = {
+        id: 'm' + Date.now().toString(36),
+        dealId: dealId,
+        investor: investorName,
+        contactId: contactId,
+        dateShown: date,
+        outcome: 'submitted-offer',
+        amount: amount,
+        comment: title
+      };
+      MARKET_ACTIVITY.unshift(maEntry);
+      if (window._db && window._db.insertMarketActivity) {
+        window._db.insertMarketActivity(maEntry).then(function(row) { if (row) maEntry.id = row.id; });
+      }
     }
     var contact = CONTACTS.find(function(c) { return c.id === contactId; });
     if (contact && contact.kind === 'person' && (!contact.lastContact || date > contact.lastContact)) {
@@ -5962,7 +6061,7 @@
       return { id: r.id, dealId: r.deal_id, type: r.type, date: r.date, body: r.body || r.title };
     });
     TIMELINE = tl.filter(function(r) { return r.contact_id; }).map(function(r) {
-      return { id: r.id, contactId: r.contact_id, type: r.type, date: r.date, title: r.title, body: r.body || '' };
+      return { id: r.id, contactId: r.contact_id, dealId: r.deal_id || null, type: r.type, date: r.date, title: r.title, body: r.body || '' };
     });
     MARKET_ACTIVITY = (dbHistory || []).map(function(r) {
       return { id: r.id, dealId: r.deal_id, investor: r.investor_name || '', contactId: r.contact_id,
@@ -7270,7 +7369,7 @@ window._db = {
   },
   insertContactNote: async function(n) {
     var res = await sb.from('timeline').insert({
-      contact_id: n.contactId, type: n.type, date: n.date,
+      contact_id: n.contactId, deal_id: n.dealId || null, type: n.type, date: n.date,
       title: n.title, body: n.body || null
     }).select().single();
     if (res.error) { console.error('insertContactNote', res.error); return null; }
