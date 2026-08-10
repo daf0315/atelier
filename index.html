@@ -4,8 +4,6 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Atelier — Danielle Fernandez</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root {
     --cream: #FBF7F2;
@@ -2847,64 +2845,6 @@
   .pipeline-summary { display: flex; align-items: center; }
   .pipeline-summary-stats { display: flex; gap: 56px; align-items: center; }
 
-  .pipe-analytics {
-    display: grid;
-    grid-template-columns: 1fr 1.5fr;
-    gap: 16px;
-    margin-bottom: 18px;
-    align-items: stretch;
-  }
-  .pa-map-card { padding: 10px; display: flex; flex-direction: column; grid-row: span 1; }
-  .pa-card {
-    background: white;
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-    padding: 14px 16px;
-  }
-  .pa-card-title {
-    font-size: 10px;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    color: var(--ink-mute);
-    font-weight: 700;
-    margin-bottom: 10px;
-  }
-  .pa-pie-wrap { display: flex; align-items: center; gap: 16px; }
-  .pa-pie-wrap svg { height: 100%; width: auto; max-width: 100%; display: block; }
-
-  .pa-legend-dot {
-    display: inline-block; width: 9px; height: 9px; border-radius: 3px;
-    margin-right: 6px; vertical-align: middle;
-  }
-  .pa-bars { display: flex; align-items: flex-end; gap: 8px; height: 110px; padding-top: 4px; }
-  .pa-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
-  .pa-bar {
-    width: 100%;
-    background: var(--gold);
-    border-radius: 4px 4px 0 0;
-    min-height: 2px;
-  }
-  .pa-bar-label { font-size: 9px; color: var(--ink-mute); }
-  .pa-bar-val { font-size: 9px; font-weight: 700; color: var(--ink-soft); }
-  #pipe-map {
-    flex: 1;
-    min-height: 300px;
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-  }
-  .pa-pie-wrap { height: 330px; flex: none; display: flex; align-items: center; justify-content: center; }
-  .pa-map-note { font-size: 10.5px; color: var(--ink-mute); margin-top: 6px; }
-  .pa-map-note a { color: var(--sunrise); cursor: pointer; }
-  @media (max-width: 1100px) {
-    .pipe-analytics { grid-template-columns: 1fr 1fr; }
-    .pa-map-card { grid-column: 1 / -1; }
-  }
-  @media (max-width: 700px) {
-    .pipe-analytics { grid-template-columns: 1fr; }
-    .pa-map-card { grid-column: auto; }
-    #pipe-map { min-height: 280px; }
-  }
-
   .toast {
     position: fixed;
     bottom: 30px;
@@ -3191,17 +3131,7 @@
         </div>
       </div>
 
-      <div class="pipe-analytics">
-        <div class="pa-card" style="display:flex;flex-direction:column;">
-          <div class="pa-card-title">Deals by status</div>
-          <div class="pa-pie-wrap" id="pa-pie-wrap"></div>
-        </div>
-        <div class="pa-card pa-map-card">
-          <div class="pa-card-title" style="padding:4px 6px 0;">Deal map</div>
-          <div id="pipe-map"></div>
-          <div class="pa-map-note" id="pa-map-note"></div>
-        </div>
-      </div>
+      
 
       <div id="pipeline-empty" style="display:none;background:white;border:1.5px dashed var(--line);border-radius:var(--r-md);padding:40px;text-align:center;margin-bottom:14px;">
         <div style="font-size:32px;margin-bottom:8px;">🏗️</div>
@@ -4496,13 +4426,7 @@
     var target = document.getElementById('work-tab-' + tab);
     if (target) target.style.display = 'block';
     if (tab === 'contacts') renderContactsList();
-    if (tab === 'pipeline') {
-      recalculateSummary(); renderNextActions();
-      setTimeout(function() {
-        if (_pipeMap) _pipeMap.invalidateSize();
-        renderPipelineAnalytics();
-      }, 80);
-    }
+    if (tab === 'pipeline') { recalculateSummary(); renderNextActions(); }
     if (tab === 'library') renderLibrary();
     window.scrollTo(0, 0);
   };
@@ -5460,219 +5384,6 @@
     }
   }
 
-  /* ══════════ PIPELINE ANALYTICS ══════════ */
-  var STATUS_GROUPS = [
-    { label: 'Prospecting', color: '#7FA8C9', statuses: ['prospecting', 'preparing', 'submitted'] },
-    { label: 'Marketing', color: '#F26B3A', statuses: ['premarket', 'onmarket', 'offmarket'] },
-    { label: 'Awarded/Exclusivity', color: '#C89B3C', statuses: ['awarded'] },
-    { label: 'Under Contract', color: '#2F7A4F', statuses: ['undercontract', 'closing'] }
-  ];
-  function _groupFor(status) {
-    for (var i = 0; i < STATUS_GROUPS.length; i++) {
-      if (STATUS_GROUPS[i].statuses.indexOf(status) >= 0) return STATUS_GROUPS[i];
-    }
-    return null;
-  }
-
-  function _dealLatLng(d) {
-    // coordinates typed straight into the address field: "25.7907, -80.1300"
-    var m = /^\s*(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/.exec(d.address || '');
-    if (m) return [parseFloat(m[1]), parseFloat(m[2])];
-    if (d.assetDetails && d.assetDetails.geo && d.assetDetails.geo.lat) {
-      return [d.assetDetails.geo.lat, d.assetDetails.geo.lng];
-    }
-    return null;
-  }
-
-  window.renderPipelineAnalytics = function() {
-    var active = DEALS.filter(function(d) { return d.status !== 'closed' && d.status !== 'lost'; });
-
-    // ── Pie: deals by status ──
-    var pieWrap = document.getElementById('pa-pie-wrap');
-    if (pieWrap) {
-      var total = active.length;
-      if (!total) {
-        pieWrap.innerHTML = '<div style="color:var(--ink-mute);font-size:12px;">No active deals yet.</div>';
-      } else {
-        var C = 170, R = 138;                       // center, radius in a 340×340 viewBox
-        var acc = -90;                              // start at 12 o'clock
-        var wedges = '', labels = '';
-        function pt(angDeg, r) {
-          var a = angDeg * Math.PI / 180;
-          return (C + r * Math.cos(a)).toFixed(1) + ' ' + (C + r * Math.sin(a)).toFixed(1);
-        }
-        STATUS_GROUPS.forEach(function(g) {
-          var n = active.filter(function(d) { return g.statuses.indexOf(d.status) >= 0; }).length;
-          if (!n) return;
-          var sweep = n / total * 360;
-          var a0 = acc, a1 = acc + sweep;
-          acc = a1;
-          if (sweep >= 359.99) {
-            wedges += '<circle cx="' + C + '" cy="' + C + '" r="' + R + '" fill="' + g.color + '" />';
-          } else {
-            var large = sweep > 180 ? 1 : 0;
-            wedges += '<path d="M ' + C + ' ' + C + ' L ' + pt(a0, R) + ' A ' + R + ' ' + R + ' 0 ' + large + ' 1 ' + pt(a1, R) + ' Z" fill="' + g.color + '" stroke="#FBF7F2" stroke-width="2.5" />';
-          }
-          var mid = (a0 + a1) / 2;
-          if (sweep >= 26) {
-            // label lives inside the slice; names with '/' wrap to two lines so long labels stay inside the circle
-            var p = pt(mid, R * 0.6).split(' ');
-            var px = parseFloat(p[0]), py = parseFloat(p[1]);
-            var parts = g.label.indexOf('/') >= 0 ? g.label.split('/') : [g.label];
-            if (parts.length === 2) {
-              labels += '<text x="' + px + '" y="' + (py - 14) + '" text-anchor="middle" fill="#fff" font-size="12.5" font-weight="700" font-family="-apple-system,sans-serif">' + escapeHtml(parts[0] + '/') + '</text>' +
-                        '<text x="' + px + '" y="' + py + '" text-anchor="middle" fill="#fff" font-size="12.5" font-weight="700" font-family="-apple-system,sans-serif">' + escapeHtml(parts[1]) + '</text>' +
-                        '<text x="' + px + '" y="' + (py + 19) + '" text-anchor="middle" fill="#fff" font-size="14" font-weight="700" font-family="Georgia,serif">' + n + '</text>';
-            } else {
-              labels += '<text x="' + px + '" y="' + (py - 5) + '" text-anchor="middle" fill="#fff" font-size="13" font-weight="700" font-family="-apple-system,sans-serif">' + escapeHtml(g.label) + '</text>' +
-                        '<text x="' + px + '" y="' + (py + 15) + '" text-anchor="middle" fill="#fff" font-size="14" font-weight="700" font-family="Georgia,serif">' + n + '</text>';
-            }
-          } else {
-            // slice too thin — label sits just outside in the slice color
-            var po = pt(mid, R + 14).split(' ');
-            var anchor = Math.cos(mid * Math.PI / 180) >= 0 ? 'start' : 'end';
-            labels += '<text x="' + po[0] + '" y="' + po[1] + '" text-anchor="' + anchor + '" fill="' + g.color + '" font-size="12" font-weight="700" font-family="-apple-system,sans-serif">' + escapeHtml(g.label) + ' · ' + n + '</text>';
-          }
-        });
-        pieWrap.innerHTML = '<svg viewBox="0 0 340 340" preserveAspectRatio="xMidYMid meet">' + wedges + labels + '</svg>';
-      }
-    }
-
-    // ── Bars: projected fees by expected closing month (next 6 with data) ──
-    var bars = document.getElementById('pa-bars');
-    if (bars) {
-      var byMonth = {};
-      active.forEach(function(d) {
-        var g = d.gateData || {};
-        var closeStr = (g.undercontract && g.undercontract.expectedClosing) ||
-                       (g.imported && g.imported.projectedClosing) || null;
-        if (!closeStr) return;
-        var mo = String(closeStr).slice(0, 7); // YYYY-MM
-        if (!/^\d{4}-\d{2}$/.test(mo)) return;
-        byMonth[mo] = (byMonth[mo] || 0) + (Number(d.fee) || 0);
-      });
-      var months = Object.keys(byMonth).sort().slice(0, 6);
-      if (!months.length) {
-        bars.innerHTML = '<div style="color:var(--ink-mute);font-size:11px;align-self:center;">Expected closing dates from your gates appear here as fees on a timeline.</div>';
-      } else {
-        var max = Math.max.apply(null, months.map(function(m) { return byMonth[m]; })) || 1;
-        var MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        bars.innerHTML = months.map(function(m) {
-          var h = Math.max(4, Math.round(byMonth[m] / max * 78));
-          var label = MO[parseInt(m.slice(5), 10) - 1] + ' ' + m.slice(2, 4);
-          return '<div class="pa-bar-col">' +
-            '<div class="pa-bar-val">' + fmtMoney(byMonth[m]) + '</div>' +
-            '<div class="pa-bar" style="height:' + h + 'px;"></div>' +
-            '<div class="pa-bar-label">' + label + '</div>' +
-          '</div>';
-        }).join('');
-      }
-    }
-
-    renderPipeMap(active);
-  };
-
-  var _pipeMap = null, _pipeMarkers = [];
-  function renderPipeMap(active) {
-    var el = document.getElementById('pipe-map');
-    var note = document.getElementById('pa-map-note');
-    if (!el) return;
-    // A hidden tab gives the map zero dimensions; fitting bounds then produces a world view.
-    // Defer: the pipeline-tab open handler re-runs this once the container is visible and sized.
-    if (!el.offsetWidth) return;
-    if (typeof L === 'undefined') {
-      el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--ink-mute);font-size:12px;">Map library unavailable — check connection.</div>';
-      return;
-    }
-    if (!_pipeMap) {
-      _pipeMap = L.map(el, { scrollWheelZoom: false }).setView([26.1, -80.4], 8);
-      L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap · © CARTO'
-      }).addTo(_pipeMap);
-    }
-    _pipeMarkers.forEach(function(m) { _pipeMap.removeLayer(m); });
-    _pipeMarkers = [];
-    var located = [], unlocated = 0;
-    active.forEach(function(d) {
-      var ll = _dealLatLng(d);
-      if (!ll) { unlocated++; return; }
-      located.push(ll);
-      var mk = L.circleMarker(ll, {
-        radius: 8, weight: 2, color: '#fff',
-        fillColor: (_groupFor(d.status) || {}).color || '#F26B3A', fillOpacity: 0.92
-      }).addTo(_pipeMap);
-      mk.bindPopup(
-        '<div style="font-family:Georgia,serif;font-size:13px;font-weight:600;margin-bottom:2px;">' + escapeHtml(d.name) + '</div>' +
-        '<div style="font-size:11px;color:#666;">' + (STATUS_LABELS[d.status] || d.status) + (d.amount ? ' · ' + fmtMoney(d.amount) : '') + '</div>' +
-        '<div style="font-size:11px;margin-top:5px;"><a href="#" onclick="openDealPage(\'' + d.id + '\');return false;" style="color:#F26B3A;">Open deal page →</a></div>'
-      );
-      _pipeMarkers.push(mk);
-    });
-    _pipeMap.invalidateSize();
-    if (located.length) {
-      // Fit to where the book actually lives: anchor on the median point and
-      // ignore far-flung outliers (bad geocodes) so one stray pin can't zoom us out to the whole country.
-      var lats = located.map(function(p) { return p[0]; }).sort(function(a, b) { return a - b; });
-      var lngs = located.map(function(p) { return p[1]; }).sort(function(a, b) { return a - b; });
-      var medLat = lats[Math.floor(lats.length / 2)];
-      var medLng = lngs[Math.floor(lngs.length / 2)];
-      var core = located.filter(function(p) {
-        return Math.abs(p[0] - medLat) < 1.5 && Math.abs(p[1] - medLng) < 1.5;
-      });
-      if (!core.length) core = located;
-      _pipeMap.fitBounds(L.latLngBounds(core).pad(0.06), { maxZoom: 12 });
-    }
-    if (note) {
-      note.innerHTML = located.length + ' of ' + active.length + ' deals mapped' +
-        (unlocated ? ' · <a onclick="geocodeDeals()">Locate ' + unlocated + ' deal' + (unlocated === 1 ? '' : 's') + ' from addresses</a>' : '') +
-        ' · <a onclick="geocodeDeals(true)" title="Redo all address lookups, Florida-bounded. Typed coordinates are never changed.">Re-check pin locations</a>';
-    }
-  }
-
-  window.geocodeDeals = function(force) {
-    var active = DEALS.filter(function(d) { return d.status !== 'closed' && d.status !== 'lost'; });
-    if (force) {
-      // wipe stored lookups for street-address deals (typed coordinates are never touched) and redo them Florida-bounded
-      active.forEach(function(d) {
-        var coordTyped = /^\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/.test(d.address || '');
-        if (!coordTyped && d.assetDetails && d.assetDetails.geo) {
-          delete d.assetDetails.geo;
-        }
-      });
-    }
-    var targets = active.filter(function(d) { return !_dealLatLng(d) && d.address; });
-    var noAddr = active.filter(function(d) { return !_dealLatLng(d) && !d.address; }).length;
-    if (!targets.length) {
-      alert(noAddr ? noAddr + ' unmapped deals have no address yet — add addresses (or paste coordinates) via the pencil edit, then run this again.' : 'Everything with an address is already mapped.');
-      return;
-    }
-    var note = document.getElementById('pa-map-note');
-    var done = 0;
-    function next(i) {
-      if (i >= targets.length) {
-        if (note) note.textContent = 'Located ' + done + ' of ' + targets.length + ' — addresses the lookup couldn\'t place need coordinates pasted into their address field.';
-        renderPipelineAnalytics();
-        return;
-      }
-      var d = targets[i];
-      if (note) note.textContent = 'Locating ' + (i + 1) + ' of ' + targets.length + ': ' + d.name + '…';
-      var q = d.address + (/(fl|florida)/i.test(d.address) ? '' : ', Florida');
-      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox=-83.0,24.5,-79.5,28.5&bounded=1&q=' + encodeURIComponent(q))
-        .then(function(r) { return r.json(); })
-        .then(function(res) {
-          if (res && res[0]) {
-            d.assetDetails = d.assetDetails || {};
-            d.assetDetails.geo = { lat: parseFloat(res[0].lat), lng: parseFloat(res[0].lon) };
-            persistDeal(d.id, { asset_details: d.assetDetails });
-            done++;
-          }
-        })
-        .catch(function() {})
-        .then(function() { setTimeout(function() { next(i + 1); }, 1150); });
-    }
-    next(0);
-  };
-
   function updateSummaryBar() {
     var active = DEALS.filter(function(d) { return d.status !== 'closed' && d.status !== 'lost'; });
     var total = 0, fees = 0;
@@ -5687,7 +5398,6 @@
     if (pc) pc.textContent = active.length + (active.length === 1 ? ' deal' : ' deals');
     var qsp = document.getElementById('qs-pipeline');
     if (qsp) qsp.textContent = fmtMoney(total);
-    try { renderPipelineAnalytics(); } catch (e) { console.error('analytics', e); }
     var ptT = document.getElementById('pt-total');
     var ptF = document.getElementById('pt-fees');
     var ptC = document.getElementById('pt-count');
