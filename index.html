@@ -4648,8 +4648,7 @@
     if (contactsView === 'person') {
       head = '<tr><th>Name</th><th>Company Name</th><th>Investment Criteria</th><th>Title</th><th>Email</th><th>Phone</th><th>Mobile</th><th>City</th><th>State</th><th>Country</th><th></th></tr>';
       rows = filtered.map(function(c) {
-        var firm = c.firmId ? CONTACTS.find(function(x) { return x.id === c.firmId; }) : null;
-        var crit = _criteriaSummary(firm);
+        var crit = _criteriaSummary(c);
         return '<tr onclick="selectContact(\'' + c.id + '\')">' +
           '<td class="ct-name">' + escapeHtml(c.name) + roleEmojis(c) + '</td>' +
           '<td>' + escapeHtml(getFirmName(c) || '—') + '</td>' +
@@ -4731,93 +4730,283 @@
   }
 
   var CRITERIA_PROPERTY_TYPES = ['Land', 'Multifamily', 'Industrial', 'Retail', 'Office', 'Mixed-Use', 'Hospitality'];
-  var CRITERIA_STRATEGIES = ['Ground-up Development', 'Value-Add', 'Core / Core+', 'Opportunistic', 'Land Banking'];
+  var LAND_DEV_TYPES = ['Multifamily', 'Industrial', 'Senior Housing', 'Affordable Housing', 'Retail', 'Self Storage', 'Condo', 'Single Family', 'Townhomes'];
+  var MF_PRODUCTS = ['Garden', 'Mid-Rise', 'High-Rise'];
+  // Per-property-type metric fields. Land additionally carries development strategy.
+  var TYPE_FIELDS = {
+    'Land':        [{ k: 'minAcres', label: 'Minimum Site Size (Acres)', ph: 'e.g. 2' },
+                    { k: 'minDeal', label: 'Minimum Deal Size ($)', ph: 'e.g. $5M' },
+                    { k: 'maxDeal', label: 'Maximum Deal Size ($)', ph: 'e.g. $50M' }],
+    'Multifamily': [{ k: 'minUnits', label: 'Minimum Unit Count', ph: 'e.g. 150' },
+                    { k: 'minDeal', label: 'Minimum Deal Size ($)', ph: 'e.g. $20M' },
+                    { k: 'maxDeal', label: 'Maximum Deal Size ($)', ph: '' }],
+    'Industrial':  [{ k: 'minSF', label: 'Minimum Building SF', ph: 'e.g. 100,000' },
+                    { k: 'minDeal', label: 'Minimum Deal Size ($)', ph: '' },
+                    { k: 'maxDeal', label: 'Maximum Deal Size ($)', ph: '' }],
+    'Retail':      [{ k: 'minSF', label: 'Minimum SF', ph: '' }, { k: 'minDeal', label: 'Minimum Deal Size ($)', ph: '' }, { k: 'maxDeal', label: 'Maximum Deal Size ($)', ph: '' }],
+    'Office':      [{ k: 'minSF', label: 'Minimum SF', ph: '' }, { k: 'minDeal', label: 'Minimum Deal Size ($)', ph: '' }, { k: 'maxDeal', label: 'Maximum Deal Size ($)', ph: '' }],
+    'Mixed-Use':   [{ k: 'minSF', label: 'Minimum SF', ph: '' }, { k: 'minDeal', label: 'Minimum Deal Size ($)', ph: '' }, { k: 'maxDeal', label: 'Maximum Deal Size ($)', ph: '' }],
+    'Hospitality': [{ k: 'minKeys', label: 'Minimum Key Count', ph: 'e.g. 120' }, { k: 'minDeal', label: 'Minimum Deal Size ($)', ph: '' }, { k: 'maxDeal', label: 'Maximum Deal Size ($)', ph: '' }]
+  };
 
-  function criteriaSection(firm) {
-    var cr = firm.criteria || {};
-    var hasAny = (cr.propertyTypes && cr.propertyTypes.length) || cr.geography || cr.dealMin || cr.dealMax || cr.sizeMetrics || (cr.strategy && cr.strategy.length);
+  // People and their firm share one set of criteria — resolve to the firm when linked
+  function _criteriaOwner(contact) {
+    if (contact.kind === 'person' && contact.firmId) {
+      var f = CONTACTS.find(function(x) { return x.id === contact.firmId; });
+      if (f) return f;
+    }
+    return contact;
+  }
+
+  function _critV2(cr) {
+    // Upgrade legacy flat criteria (v1) to the per-type structure without losing anything
+    if (!cr) return { v: 2, types: {}, geography: '', notes: '' };
+    if (cr.v === 2) return cr;
+    var v2 = { v: 2, types: {}, geography: cr.geography || '', notes: '' };
+    (cr.propertyTypes || []).forEach(function(t) {
+      v2.types[t] = { minDeal: cr.dealMin || '', maxDeal: cr.dealMax || '' };
+    });
+    var legacyBits = [];
+    if (cr.sizeMetrics) legacyBits.push(cr.sizeMetrics);
+    if (cr.strategy && cr.strategy.length) legacyBits.push('Strategy: ' + cr.strategy.join(', '));
+    v2.notes = legacyBits.join(' · ');
+    return v2;
+  }
+
+  function _typeSummary(t, tc) {
+    var bits = [];
+    if (tc.minAcres) bits.push(tc.minAcres + '+ ac');
+    if (tc.minUnits) bits.push(tc.minUnits + '+ units');
+    if (tc.minSF) bits.push(tc.minSF + '+ SF');
+    if (tc.minKeys) bits.push(tc.minKeys + '+ keys');
+    if (tc.minDeal || tc.maxDeal) bits.push((tc.minDeal || 'Any') + '–' + (tc.maxDeal || 'Any'));
+    if (t === 'Land' && tc.devTypes && tc.devTypes.length) bits.push('builds ' + tc.devTypes.join('/'));
+    if (tc.products && tc.products.length) bits.push(tc.products.join('/'));
+    return bits.join(' · ');
+  }
+
+  function _criteriaSummary(contact) {
+    if (!contact) return '';
+    var owner = _criteriaOwner(contact);
+    if (!owner.criteria) return '';
+    var cr = _critV2(owner.criteria);
+    var types = Object.keys(cr.types);
+    if (!types.length) return '';
+    var first = cr.types[types[0]];
+    var range = (first.minDeal || first.maxDeal) ? ' · ' + (first.minDeal || 'Any') + '–' + (first.maxDeal || 'Any') : '';
+    return types.join(', ') + range;
+  }
+
+  function criteriaSection(contact) {
+    var owner = _criteriaOwner(contact);
+    var cr = owner.criteria ? _critV2(owner.criteria) : null;
+    var hasAny = cr && (Object.keys(cr.types).length || cr.geography || cr.notes);
+    var shared = (owner.id !== contact.id)
+      ? '<div style="font-size:10.5px;color:var(--ink-mute);margin-bottom:8px;">Shared with ' + escapeHtml(owner.name) + ' — one profile, one set of criteria.</div>'
+      : '';
     var body;
     if (!hasAny) {
-      body = '<div class="profile-info-value muted">No criteria on file yet — capture what this group buys so deals can be matched to them.</div>';
+      body = '<div class="profile-info-value muted">No criteria on file yet — capture what ' + (owner.kind === 'firm' ? 'this group buys' : (owner.name.split(' ')[0] || 'they') + ' buys') + ' so deals can be matched.</div>';
     } else {
-      function item(label, val) {
-        return val ? '<div class="profile-info-item"><div class="profile-info-label">' + label + '</div><div class="profile-info-value">' + val + '</div></div>' : '';
-      }
-      var dealRange = '';
-      if (cr.dealMin || cr.dealMax) {
-        dealRange = (cr.dealMin ? _fmtMoneyDisplay(cr.dealMin) : 'Any') + ' – ' + (cr.dealMax ? _fmtMoneyDisplay(cr.dealMax) : 'Any');
-      }
-      body = '<div class="profile-info-grid">' +
-        item('Property types', (cr.propertyTypes || []).map(escapeHtml).join(' · ')) +
-        item('Target geography', escapeHtml(cr.geography || '')) +
-        item('Deal size range', escapeHtml(dealRange)) +
-        item('Size metrics', escapeHtml(cr.sizeMetrics || '')) +
-        item('Strategy', (cr.strategy || []).map(escapeHtml).join(' · ')) +
-      '</div>';
+      var typeBlocks = Object.keys(cr.types).map(function(t) {
+        var tc = cr.types[t];
+        var detail = _typeSummary(t, tc);
+        var devDetail = '';
+        if (t === 'Land' && tc.devDetails) {
+          devDetail = Object.keys(tc.devDetails).map(function(dt) {
+            var dd = tc.devDetails[dt];
+            var parts = [];
+            if (dd.minUnits) parts.push(dd.minUnits + '+ units');
+            if (dd.products && dd.products.length) parts.push(dd.products.join('/'));
+            if (dd.specs) parts.push(dd.specs);
+            return parts.length ? '<div style="font-size:11px;color:var(--ink-soft);padding-left:12px;">↳ ' + escapeHtml(dt) + ': ' + escapeHtml(parts.join(' · ')) + '</div>' : '';
+          }).join('');
+        }
+        return '<div style="padding:7px 0;border-bottom:1px solid var(--line-soft);">' +
+          '<span style="font-weight:600;">' + escapeHtml(t) + '</span>' +
+          (detail ? ' <span style="color:var(--ink-soft);font-size:12px;">— ' + escapeHtml(detail) + '</span>' : '') +
+          devDetail +
+        '</div>';
+      }).join('');
+      body = typeBlocks +
+        (cr.geography ? '<div style="padding:7px 0;font-size:12px;"><span style="font-weight:600;">Geography:</span> <span style="color:var(--ink-soft);">' + escapeHtml(cr.geography) + '</span></div>' : '') +
+        (cr.notes ? '<div style="padding:4px 0;font-size:11.5px;color:var(--ink-mute);">' + escapeHtml(cr.notes) + '</div>' : '');
     }
     return '<div class="profile-section">' +
       '<div class="profile-section-title">Investment criteria</div>' +
-      body +
-      '<button class="btn" style="font-size:11px;margin-top:10px;" onclick="openCriteriaModal(\'' + firm.id + '\')">' + (hasAny ? 'Edit criteria' : 'Set criteria') + '</button>' +
+      shared + body +
+      '<button class="btn" style="font-size:11px;margin-top:10px;" onclick="openCriteriaModal(\'' + contact.id + '\')">' + (hasAny ? 'Edit criteria' : 'Set criteria') + '</button>' +
     '</div>';
   }
 
-  window.openCriteriaModal = function(firmId) {
-    var f = CONTACTS.find(function(x) { return x.id === firmId; });
-    if (!f || f.kind !== 'firm') return;
-    var cr = f.criteria || {};
-    var typeBoxes = CRITERIA_PROPERTY_TYPES.map(function(t) {
-      var checked = (cr.propertyTypes || []).indexOf(t) >= 0 ? ' checked' : '';
-      return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 12px 6px 0;"><input type="checkbox" data-crit="ptype" value="' + t + '"' + checked + ' /> ' + t + '</label>';
-    }).join('');
-    var stratBoxes = CRITERIA_STRATEGIES.map(function(s) {
-      var checked = (cr.strategy || []).indexOf(s) >= 0 ? ' checked' : '';
-      return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 12px 6px 0;"><input type="checkbox" data-crit="strat" value="' + s + '"' + checked + ' /> ' + s + '</label>';
-    }).join('');
+  var _critDraft = null, _critOwnerId = null;
+
+  window.openCriteriaModal = function(contactId) {
+    var c = CONTACTS.find(function(x) { return x.id === contactId; });
+    if (!c) return;
+    var owner = _criteriaOwner(c);
+    _critOwnerId = owner.id;
+    _critDraft = JSON.parse(JSON.stringify(_critV2(owner.criteria)));
     var html =
       '<div class="modal-header"><div class="modal-eyebrow">Investment criteria</div>' +
-      '<div class="modal-title" style="font-size:20px;">' + escapeHtml(f.name) + '</div></div>' +
-      '<div class="modal-body">' +
-        '<div class="field"><label class="field-label">Property types</label><div>' + typeBoxes + '</div></div>' +
-        '<div class="field"><label class="field-label">Target geography</label>' +
-          '<input class="field-input" id="cm-geo" value="' + escapeHtml(cr.geography || '') + '" placeholder="e.g. East Broward, Miami urban core, Palm Beach coastal" /></div>' +
-        '<div class="field-row">' +
-          '<div class="field"><label class="field-label">Deal size min ($)</label><input class="field-input" id="cm-min" value="' + escapeHtml(cr.dealMin || '') + '" placeholder="e.g. $10M" /></div>' +
-          '<div class="field"><label class="field-label">Deal size max ($)</label><input class="field-input" id="cm-max" value="' + escapeHtml(cr.dealMax || '') + '" placeholder="e.g. $50M" /></div>' +
-        '</div>' +
-        '<div class="field"><label class="field-label">Size metrics</label>' +
-          '<input class="field-input" id="cm-size" value="' + escapeHtml(cr.sizeMetrics || '') + '" placeholder="e.g. 150+ units · 2–10 acres" /></div>' +
-        '<div class="field"><label class="field-label">Strategy</label><div>' + stratBoxes + '</div></div>' +
-      '</div>' +
+      '<div class="modal-title" style="font-size:20px;">' + escapeHtml(owner.name) + '</div></div>' +
+      '<div class="modal-body" id="crit-body" style="max-height:60vh;overflow-y:auto;"></div>' +
       '<div class="modal-footer">' +
         '<div class="modal-footer-left"></div>' +
         '<div class="modal-footer-right">' +
           '<button class="btn" onclick="closeModal()">Cancel</button>' +
-          '<button class="btn primary" onclick="saveCriteria(\'' + firmId + '\')">Save criteria</button>' +
+          '<button class="btn primary" onclick="saveCriteria()">Save criteria</button>' +
         '</div></div>';
     document.getElementById('modal').innerHTML = html;
     document.getElementById('modal-backdrop').classList.add('show');
     window._modalCancel = null;
+    renderCriteriaBody();
   };
 
-  window.saveCriteria = function(firmId) {
-    var f = CONTACTS.find(function(x) { return x.id === firmId; });
-    if (!f) return;
-    var ptypes = [], strats = [];
-    document.querySelectorAll('input[data-crit="ptype"]:checked').forEach(function(cb) { ptypes.push(cb.value); });
-    document.querySelectorAll('input[data-crit="strat"]:checked').forEach(function(cb) { strats.push(cb.value); });
-    f.criteria = {
-      propertyTypes: ptypes,
-      geography: document.getElementById('cm-geo').value.trim() || null,
-      dealMin: document.getElementById('cm-min').value.trim() || null,
-      dealMax: document.getElementById('cm-max').value.trim() || null,
-      sizeMetrics: document.getElementById('cm-size').value.trim() || null,
-      strategy: strats
-    };
-    if (window._db && window._db.updateContact) window._db.updateContact(firmId, { criteria: f.criteria });
+  function _chipBtn(label, active, onclick) {
+    return '<button type="button" class="filter-chip' + (active ? ' active' : '') + '" style="margin:0 6px 6px 0;" onclick="' + onclick + '">' + escapeHtml(label) + '</button>';
+  }
+
+  function renderCriteriaBody() {
+    var body = document.getElementById('crit-body');
+    if (!body) return;
+    var d = _critDraft;
+    var html = '<div class="field"><label class="field-label">Property types <span class="hint">(select all that apply — details appear per type)</span></label><div>' +
+      CRITERIA_PROPERTY_TYPES.map(function(t) {
+        return _chipBtn(t, !!d.types[t], "critToggleType('" + t + "')");
+      }).join('') + '</div></div>';
+
+    Object.keys(d.types).forEach(function(t) {
+      var tc = d.types[t];
+      html += '<div style="border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:12px;background:var(--cream);">' +
+        '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px;">' + escapeHtml(t) + '</div>' +
+        '<div class="field-row">' +
+          TYPE_FIELDS[t].slice(0, 2).map(function(f) {
+            return '<div class="field"><label class="field-label">' + f.label + '</label>' +
+              '<input class="field-input" data-crit-field="' + t + '|' + f.k + '" value="' + escapeHtml(tc[f.k] || '') + '" placeholder="' + f.ph + '" onchange="critCollectFields()" /></div>';
+          }).join('') +
+        '</div>' +
+        (TYPE_FIELDS[t][2] ? '<div class="field"><label class="field-label">' + TYPE_FIELDS[t][2].label + '</label>' +
+          '<input class="field-input" data-crit-field="' + t + '|' + TYPE_FIELDS[t][2].k + '" value="' + escapeHtml(tc[TYPE_FIELDS[t][2].k] || '') + '" placeholder="' + TYPE_FIELDS[t][2].ph + '" onchange="critCollectFields()" /></div>' : '');
+
+      if (t === 'Multifamily') {
+        html += '<div class="field"><label class="field-label">Product</label><div>' +
+          MF_PRODUCTS.map(function(p) {
+            var on = (tc.products || []).indexOf(p) >= 0;
+            return _chipBtn(p, on, "critToggleProduct('Multifamily','" + p + "')");
+          }).join('') + '</div></div>';
+      }
+
+      if (t === 'Land') {
+        html += '<div class="field"><label class="field-label">Strategy — what do they build?</label><div>' +
+          LAND_DEV_TYPES.map(function(dt) {
+            var on = (tc.devTypes || []).indexOf(dt) >= 0;
+            return _chipBtn(dt, on, "critToggleDevType('" + dt + "')");
+          }).join('') + '</div></div>';
+        (tc.devTypes || []).forEach(function(dt) {
+          var dd = (tc.devDetails && tc.devDetails[dt]) || {};
+          html += '<div style="border-left:3px solid var(--sunrise);padding:8px 12px;margin:8px 0;background:white;border-radius:0 var(--r-sm) var(--r-sm) 0;">' +
+            '<div style="font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:6px;">↳ ' + escapeHtml(dt) + '</div>';
+          if (dt === 'Multifamily') {
+            html += '<div class="field"><label class="field-label">Minimum unit count</label>' +
+              '<input class="field-input" data-crit-dev="' + dt + '|minUnits" value="' + escapeHtml(dd.minUnits || '') + '" placeholder="e.g. 150" onchange="critCollectFields()" /></div>' +
+              '<div class="field"><label class="field-label">Product</label><div>' +
+              MF_PRODUCTS.map(function(p) {
+                var on = (dd.products || []).indexOf(p) >= 0;
+                return _chipBtn(p, on, "critToggleDevProduct('" + dt + "','" + p + "')");
+              }).join('') + '</div></div>';
+          } else {
+            html += '<div class="field"><label class="field-label">Specs <span class="hint">(what defines a fit for this product)</span></label>' +
+              '<input class="field-input" data-crit-dev="' + dt + '|specs" value="' + escapeHtml(dd.specs || '') + '" placeholder="e.g. 100k+ SF, 32\' clear" onchange="critCollectFields()" /></div>';
+          }
+          html += '</div>';
+        });
+      }
+      html += '</div>';
+    });
+
+    html += '<div class="field"><label class="field-label">Target geography</label>' +
+      '<input class="field-input" id="cm-geo" value="' + escapeHtml(d.geography || '') + '" placeholder="e.g. East Broward, Miami urban core" onchange="critCollectFields()" /></div>' +
+      '<div class="field"><label class="field-label">Notes</label>' +
+      '<input class="field-input" id="cm-notes" value="' + escapeHtml(d.notes || '') + '" placeholder="Anything else about their appetite" onchange="critCollectFields()" /></div>';
+
+    body.innerHTML = html;
+  }
+
+  window.critCollectFields = function() {
+    var d = _critDraft;
+    document.querySelectorAll('[data-crit-field]').forEach(function(inp) {
+      var p = inp.getAttribute('data-crit-field').split('|');
+      if (d.types[p[0]]) d.types[p[0]][p[1]] = inp.value.trim();
+    });
+    document.querySelectorAll('[data-crit-dev]').forEach(function(inp) {
+      var p = inp.getAttribute('data-crit-dev').split('|');
+      var land = d.types['Land'];
+      if (land) {
+        land.devDetails = land.devDetails || {};
+        land.devDetails[p[0]] = land.devDetails[p[0]] || {};
+        land.devDetails[p[0]][p[1]] = inp.value.trim();
+      }
+    });
+    var geo = document.getElementById('cm-geo');
+    var notes = document.getElementById('cm-notes');
+    if (geo) d.geography = geo.value.trim();
+    if (notes) d.notes = notes.value.trim();
+  };
+
+  window.critToggleType = function(t) {
+    critCollectFields();
+    if (_critDraft.types[t]) delete _critDraft.types[t];
+    else _critDraft.types[t] = {};
+    renderCriteriaBody();
+  };
+
+  window.critToggleDevType = function(dt) {
+    critCollectFields();
+    var land = _critDraft.types['Land'];
+    if (!land) return;
+    land.devTypes = land.devTypes || [];
+    var i = land.devTypes.indexOf(dt);
+    if (i >= 0) {
+      land.devTypes.splice(i, 1);
+      if (land.devDetails) delete land.devDetails[dt];
+    } else land.devTypes.push(dt);
+    renderCriteriaBody();
+  };
+
+  window.critToggleProduct = function(t, p) {
+    critCollectFields();
+    var tc = _critDraft.types[t];
+    if (!tc) return;
+    tc.products = tc.products || [];
+    var i = tc.products.indexOf(p);
+    if (i >= 0) tc.products.splice(i, 1); else tc.products.push(p);
+    renderCriteriaBody();
+  };
+
+  window.critToggleDevProduct = function(dt, p) {
+    critCollectFields();
+    var land = _critDraft.types['Land'];
+    if (!land) return;
+    land.devDetails = land.devDetails || {};
+    land.devDetails[dt] = land.devDetails[dt] || {};
+    var dd = land.devDetails[dt];
+    dd.products = dd.products || [];
+    var i = dd.products.indexOf(p);
+    if (i >= 0) dd.products.splice(i, 1); else dd.products.push(p);
+    renderCriteriaBody();
+  };
+
+  window.saveCriteria = function() {
+    critCollectFields();
+    var owner = CONTACTS.find(function(x) { return x.id === _critOwnerId; });
+    if (!owner) return;
+    owner.criteria = _critDraft;
+    if (window._db && window._db.updateContact) window._db.updateContact(owner.id, { criteria: owner.criteria });
     document.getElementById('modal-backdrop').classList.remove('show');
-    renderContactProfile(firmId);
-    showToast('Criteria saved', f.name);
+    if (selectedContactId) renderContactProfile(selectedContactId);
+    renderContactsList();
+    showToast('Criteria saved', owner.name);
   };
 
   function renderContactProfile(contactId) {
@@ -4845,8 +5034,10 @@
     }
 
     // Compact log button in header top-right (Edit 1)
-    var headerLogBtn = '<button class="profile-header-log" onclick="openLogForm(\'' + contactId + '\')">📝 Log</button>' +
-      '<button class="profile-header-log" style="right:86px;" onclick="openEditContactModal(\'' + contactId + '\')">✎ Edit</button>';
+    var headerLogBtn = '<div style="position:absolute;top:20px;right:24px;display:flex;gap:8px;">' +
+      '<button class="profile-header-log" style="position:static;" onclick="openEditContactModal(\'' + contactId + '\')">✎ Edit</button>' +
+      '<button class="profile-header-log" style="position:static;" onclick="openLogForm(\'' + contactId + '\')">📝 Log</button>' +
+    '</div>';
 
     // Quick actions row (people only — call/text/email, NO log)
     var quickActions = '';
@@ -4876,8 +5067,8 @@
         '<div class="profile-section">' +
           '<div class="profile-section-title">Contact info</div>' +
           '<div class="profile-info-grid">' +
-            '<div class="profile-info-item"><div class="profile-info-label">Mobile</div><div class="profile-info-value ' + (contact.phone ? '' : 'muted') + '">' + (contact.phone || 'Not on file — add') + '</div></div>' +
-            (contact.directPhone ? '<div class="profile-info-item"><div class="profile-info-label">Direct</div><div class="profile-info-value">' + contact.directPhone + '</div></div>' : '') +
+            '<div class="profile-info-item"><div class="profile-info-label">Mobile</div><div class="profile-info-value ' + (contact.phone ? '' : 'muted') + '">' + (contact.phone ? '<a href="' + _telHref(contact.phone) + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(_fmtPhone(contact.phone)) + '</a>' : 'Not on file — add') + '</div></div>' +
+            (contact.directPhone ? '<div class="profile-info-item"><div class="profile-info-label">Phone</div><div class="profile-info-value"><a href="' + _telHref(contact.directPhone) + '" style="color:var(--sunrise);text-decoration:none;">' + escapeHtml(_fmtPhone(contact.directPhone)) + '</a></div></div>' : '') +
             '<div class="profile-info-item"><div class="profile-info-label">Email</div><div class="profile-info-value ' + (contact.email ? '' : 'muted') + '">' + (contact.email || 'Not on file — add') + '</div></div>' +
             '<div class="profile-info-item"><div class="profile-info-label">Last contact</div><div class="profile-info-value ' + (contact.lastContact ? '' : 'muted') + '">' + (contact.lastContact ? contact.lastContact + ' (' + days + ' days ago)' : 'Never') + '</div></div>' +
           '</div>' +
@@ -5055,16 +5246,7 @@
     '</div>';
 
     // Back-to-firm link (person profile only)
-    var backLink = '';
-    if (!isFirm && contact.firmId) {
-      var firm = CONTACTS.find(function(c) { return c.id === contact.firmId; });
-      if (firm) {
-        backLink =
-          '<div class="profile-back" onclick="selectContact(\'' + firm.id + '\')">' +
-          '← Back to ' + escapeHtml(firm.name) +
-          '</div>';
-      }
-    }
+    var backLink = ''; // firm name in the subtitle links to the firm; no separate back arrow
 
     // Company overview block (firms only) — Edit 2
     var overviewBlock = '';
@@ -5112,7 +5294,7 @@
           '</div>' +
         '</div>' +
         overviewBlock +
-        (isFirm ? criteriaSection(contact) : '') +
+        criteriaSection(contact) +
         quickActions +
         contactInfo +
         linkedBlock +
