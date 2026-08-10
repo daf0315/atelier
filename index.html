@@ -2778,6 +2778,9 @@
   .pipeline-summary { display: flex; align-items: center; }
   .pipeline-summary-stats { display: flex; gap: 56px; align-items: center; }
 
+  .tl-actions { margin-left: 8px; }
+  .timeline-item .ct-action { opacity: 0; }
+  .timeline-item:hover .ct-action { opacity: 1; }
   .tl-expandable { cursor: pointer; }
   .tl-expandable:hover { background: var(--cream); border-radius: var(--r-sm); }
   .tl-summary { font-size: 12px; color: var(--ink-soft); margin-top: 3px; }
@@ -5278,8 +5281,16 @@
     }
 
     // Deal history — every deal shown to this contact with outcome (Edit 5)
-    var historyEntries = DEAL_HISTORY.filter(function(h) {
-      return h.contactIds && h.contactIds.indexOf(contactId) >= 0;
+    // Live view over the deals' market activity: this person's linked entries,
+    // and for a firm, everything linked to its people too. One record, both surfaces.
+    var _histIds = [contactId];
+    if (isFirm && contact.linkedContacts) _histIds = _histIds.concat(contact.linkedContacts);
+    var historyEntries = MARKET_ACTIVITY.filter(function(m) {
+      return m.contactId && _histIds.indexOf(m.contactId) >= 0;
+    }).map(function(m) {
+      var deal = DEALS.find(function(dl) { return dl.id === m.dealId; });
+      return { dealName: deal ? deal.name : m.investor, dealId: m.dealId, dateShown: m.dateShown,
+               outcome: m.outcome, amount: m.amount, comment: m.comment };
     }).sort(function(a, b) {
       return (b.dateShown || '').localeCompare(a.dateShown || '');
     });
@@ -5345,6 +5356,10 @@
               '<div class="timeline-content">' +
                 '<span class="timeline-tag tag-' + dispType + '">' + (dispType === 'offer' ? '📤 offer' : dispType) + '</span>' +
                 '<strong>' + escapeHtml(ev.title) + '</strong>' + dealChip +
+                '<span class="tl-actions">' +
+                  '<span class="ct-action" title="Edit" onclick="event.stopPropagation();openEditLogModal(\'' + ev._k + '\')">✎</span>' +
+                  '<span class="ct-action ct-action-del" title="Delete" onclick="event.stopPropagation();deleteTimelineEntry(\'' + ev._k + '\')">🗑</span>' +
+                '</span>' +
                 (summary ? '<div class="tl-summary">' + escapeHtml(summary) + (expandable ? ' <span class="tl-more">more…</span>' : '') + '</div>' : '') +
                 (expandable ? '<div class="tl-full" style="display:none;">' + escapeHtml(ev.body) + '</div>' : '') +
               '</div>' +
@@ -5427,6 +5442,73 @@
     return (lastSpace > 60 ? cut.slice(0, lastSpace) : cut) + '…';
   }
 
+  function _isUuid(v) { return typeof v === 'string' && /^[0-9a-f]{8}-/.test(v); }
+
+  window.openEditLogModal = function(k) {
+    var ev = TIMELINE.find(function(t) { return t._k === k; });
+    if (!ev) return;
+    var dealOpts = '<option value="">— none —</option>' +
+      DEALS.filter(function(dl) { return dl.status !== 'closed' && dl.status !== 'lost' || dl.id === ev.dealId; })
+        .sort(function(a, b) { return a.name.localeCompare(b.name); })
+        .map(function(dl) { return '<option value="' + dl.id + '"' + (ev.dealId === dl.id ? ' selected' : '') + '>' + escapeHtml(dl.name) + '</option>'; }).join('');
+    var typeOpts = ['call', 'email', 'meeting', 'note'].map(function(t) {
+      var sel = (ev.type === t || (ev.type === 'memo' && t === 'note') || (ev.type === 'offer' && t === 'note')) ? ' selected' : '';
+      return '<option value="' + t + '"' + sel + '>' + t.charAt(0).toUpperCase() + t.slice(1) + '</option>';
+    }).join('');
+    var html =
+      '<div class="modal-header"><div class="modal-eyebrow">Edit activity</div>' +
+      '<div class="modal-title" style="font-size:20px;">' + escapeHtml(ev.title) + '</div></div>' +
+      '<div class="modal-body">' +
+        '<div class="field-row">' +
+          '<div class="field"><label class="field-label">Type</label><select class="field-select" id="el-type">' + typeOpts + '</select></div>' +
+          '<div class="field"><label class="field-label">Date</label><input type="date" class="field-input" id="el-date" value="' + (ev.date || '') + '" /></div>' +
+        '</div>' +
+        '<div class="field"><label class="field-label required">Title</label><input class="field-input" id="el-title" value="' + escapeHtml(ev.title) + '" /></div>' +
+        '<div class="field"><label class="field-label">Details</label><textarea class="field-input" id="el-body" style="min-height:90px;">' + escapeHtml(ev.body || '') + '</textarea></div>' +
+        '<div class="field"><label class="field-label">Related deal</label><select class="field-select" id="el-deal">' + dealOpts + '</select></div>' +
+      '</div>' +
+      '<div class="modal-footer">' +
+        '<div class="modal-footer-left"></div>' +
+        '<div class="modal-footer-right">' +
+          '<button class="btn" onclick="closeModal()">Cancel</button>' +
+          '<button class="btn primary" onclick="saveEditLog(\'' + k + '\')">Save changes</button>' +
+        '</div></div>';
+    document.getElementById('modal').innerHTML = html;
+    document.getElementById('modal-backdrop').classList.add('show');
+    window._modalCancel = null;
+  };
+
+  window.saveEditLog = function(k) {
+    var ev = TIMELINE.find(function(t) { return t._k === k; });
+    if (!ev) return;
+    var title = document.getElementById('el-title').value.trim();
+    if (!title) { alert('A short title is required.'); return; }
+    ev.type = document.getElementById('el-type').value;
+    ev.date = document.getElementById('el-date').value;
+    ev.title = title;
+    ev.body = document.getElementById('el-body').value.trim();
+    ev.dealId = document.getElementById('el-deal').value || null;
+    if (_isUuid(ev.id) && window._db && window._db.updateContactNote) {
+      window._db.updateContactNote(ev.id, { type: ev.type, date: ev.date, title: ev.title, body: ev.body || null, deal_id: ev.dealId });
+    }
+    document.getElementById('modal-backdrop').classList.remove('show');
+    renderContactProfile(ev.contactId);
+    showToast('Activity updated', title);
+  };
+
+  window.deleteTimelineEntry = function(k) {
+    var idx = TIMELINE.findIndex(function(t) { return t._k === k; });
+    if (idx < 0) return;
+    var ev = TIMELINE[idx];
+    if (!confirm('Delete "' + ev.title + '" from the timeline? This cannot be undone.')) return;
+    TIMELINE.splice(idx, 1);
+    if (_isUuid(ev.id) && window._db && window._db.deleteContactNote) {
+      window._db.deleteContactNote(ev.id);
+    }
+    renderContactProfile(ev.contactId);
+    showToast('Activity deleted', ev.title);
+  };
+
   window.toggleTimelineItem = function(el) {
     var full = el.querySelector('.tl-full');
     var summary = el.querySelector('.tl-summary');
@@ -5447,10 +5529,21 @@
     _renderLogForm(contactId, 'quick');
   };
 
-  window.logTypeChanged = function(contactId) {
-    var typeEl = document.getElementById('log-type-' + contactId);
+  window.logDealChanged = function(contactId) {
+    var dealEl = document.getElementById('log-deal-' + contactId);
+    var outRow = document.getElementById('log-outcome-row-' + contactId);
+    if (outRow) outRow.style.display = (dealEl && dealEl.value) ? '' : 'none';
+    if (!dealEl || !dealEl.value) {
+      var outSel = document.getElementById('log-outcome-' + contactId);
+      if (outSel) outSel.value = '';
+      logOutcomeChanged(contactId);
+    }
+  };
+
+  window.logOutcomeChanged = function(contactId) {
+    var outSel = document.getElementById('log-outcome-' + contactId);
     var amtRow = document.getElementById('log-amount-row-' + contactId);
-    if (amtRow) amtRow.style.display = (typeEl && typeEl.value === 'offer') ? '' : 'none';
+    if (amtRow) amtRow.style.display = (outSel && outSel.value) ? '' : 'none';
   };
 
   window.setLogMode = function(contactId, mode) {
@@ -5476,23 +5569,31 @@
           toggle +
           '<div class="log-form-row">' +
             '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Type</label>' +
-            '<select id="log-type-' + contactId + '" onchange="logTypeChanged(\'' + contactId + '\')">' +
+            '<select id="log-type-' + contactId + '">' +
               '<option value="call">Call</option><option value="email">Email</option>' +
               '<option value="meeting">Meeting</option><option value="note">Note</option>' +
-              '<option value="offer">📤 Offer submitted</option>' +
             '</select>' +
           '</div>' +
           '<div class="log-form-row">' +
             '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Related deal</label>' +
-            '<select id="log-deal-' + contactId + '">' +
+            '<select id="log-deal-' + contactId + '" onchange="logDealChanged(\'' + contactId + '\')">' +
               '<option value="">— none —</option>' +
               DEALS.filter(function(dl) { return dl.status !== 'closed' && dl.status !== 'lost'; })
                 .sort(function(a, b) { return a.name.localeCompare(b.name); })
                 .map(function(dl) { return '<option value="' + dl.id + '">' + escapeHtml(dl.name) + '</option>'; }).join('') +
             '</select>' +
           '</div>' +
+          '<div class="log-form-row" id="log-outcome-row-' + contactId + '" style="display:none;">' +
+            '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Market outcome</label>' +
+            '<select id="log-outcome-' + contactId + '" onchange="logOutcomeChanged(\'' + contactId + '\')">' +
+              '<option value="">Just logging — no outcome</option>' +
+              Object.keys(OUTCOME_META).map(function(k) {
+                return '<option value="' + k + '">' + OUTCOME_META[k].icon + ' ' + OUTCOME_META[k].label + '</option>';
+              }).join('') +
+            '</select>' +
+          '</div>' +
           '<div class="log-form-row" id="log-amount-row-' + contactId + '" style="display:none;">' +
-            '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Offer amount</label>' +
+            '<label style="font-size:11px;color:var(--ink-mute);align-self:center;font-weight:600;letter-spacing:0.06em;text-transform:uppercase">Amount</label>' +
             '<input type="text" placeholder="e.g. $12.5M" id="log-amount-' + contactId + '" />' +
           '</div>' +
           '<div class="log-form-row">' +
@@ -5582,17 +5683,19 @@
     if (!title) { alert('A short title is required.'); return; }
     var dealEl = document.getElementById('log-deal-' + contactId);
     var dealId = dealEl ? (dealEl.value || null) : null;
+    var outcomeEl = document.getElementById('log-outcome-' + contactId);
+    var outcome = (dealId && outcomeEl) ? outcomeEl.value : '';
     var amountEl = document.getElementById('log-amount-' + contactId);
     var amount = amountEl ? amountEl.value.trim() : '';
-    if (type === 'offer' && !dealId) { alert('An offer needs a related deal — pick one from the list.'); return; }
     _stopLiveTimer(contactId);
-    var logEntry = { contactId: contactId, dealId: dealId, type: type, date: date, title: title, body: body };
+    var logEntry = { _k: 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), contactId: contactId, dealId: dealId, type: type, date: date, title: title, body: body };
     TIMELINE.unshift(logEntry);
     if (window._db && window._db.insertContactNote) {
       window._db.insertContactNote(logEntry).then(function(row) { if (row) logEntry.id = row.id; });
     }
-    // An offer log is market intelligence: it lands on the deal's Market Activity too, contact-linked
-    if (type === 'offer' && dealId) {
+    // A market outcome makes this log market intelligence: it lands on the deal's
+    // Market Activity too, contact-linked — one save, both surfaces.
+    if (dealId && outcome) {
       var oc = CONTACTS.find(function(x) { return x.id === contactId; });
       var investorName = oc ? (oc.kind === 'person' ? (getFirmName(oc) || oc.name) : oc.name) : 'Unknown';
       var maEntry = {
@@ -5601,7 +5704,7 @@
         investor: investorName,
         contactId: contactId,
         dateShown: date,
-        outcome: 'submitted-offer',
+        outcome: outcome,
         amount: amount,
         comment: title
       };
@@ -6060,8 +6163,9 @@
     DEAL_NOTES = tl.filter(function(r) { return r.deal_id; }).map(function(r) {
       return { id: r.id, dealId: r.deal_id, type: r.type, date: r.date, body: r.body || r.title };
     });
+    var _tlk = 0;
     TIMELINE = tl.filter(function(r) { return r.contact_id; }).map(function(r) {
-      return { id: r.id, contactId: r.contact_id, dealId: r.deal_id || null, type: r.type, date: r.date, title: r.title, body: r.body || '' };
+      return { _k: 'k' + (++_tlk), id: r.id, contactId: r.contact_id, dealId: r.deal_id || null, type: r.type, date: r.date, title: r.title, body: r.body || '' };
     });
     MARKET_ACTIVITY = (dbHistory || []).map(function(r) {
       return { id: r.id, dealId: r.deal_id, investor: r.investor_name || '', contactId: r.contact_id,
@@ -6535,7 +6639,11 @@
           '<div class="deal-history-list">' + activityHtml + '</div>' +
           '<div class="log-form" style="margin-top:12px;">' +
             '<div class="log-form-row">' +
-              '<input type="text" id="ma-investor-' + dealId + '" placeholder="Investor / firm name" style="grid-column:1/-1;" />' +
+              '<input type="text" id="ma-investor-' + dealId + '" list="ma-contacts-list" placeholder="Investor / firm name — pick a contact to link them" style="grid-column:1/-1;" />' +
+              '<datalist id="ma-contacts-list">' +
+                CONTACTS.slice().sort(function(a, b) { return a.name.localeCompare(b.name); })
+                  .map(function(c) { return '<option value="' + escapeHtml(c.name) + '"></option>'; }).join('') +
+              '</datalist>' +
             '</div>' +
             '<div class="log-form-row">' +
               '<select id="ma-outcome-' + dealId + '">' + outcomeOpts + '</select>' +
@@ -6688,11 +6796,13 @@
   window.saveMarketActivity = function(dealId) {
     var investor = document.getElementById('ma-investor-' + dealId).value.trim();
     if (!investor) { alert('Investor name is required.'); return; }
+    // If the typed name matches a contact, link the record — it then shows in their Deal history too
+    var matched = CONTACTS.find(function(c) { return c.name.toLowerCase() === investor.toLowerCase(); });
     var entry = {
       id: 'm' + Date.now().toString(36),
       dealId: dealId,
       investor: investor,
-      contactId: null,
+      contactId: matched ? matched.id : null,
       dateShown: document.getElementById('ma-date-' + dealId).value,
       outcome: document.getElementById('ma-outcome-' + dealId).value,
       amount: document.getElementById('ma-amount-' + dealId).value.trim(),
@@ -7366,6 +7476,14 @@ window._db = {
     await sb.from('contacts').update({ firm_id: null }).eq('firm_id', id);
     var res = await sb.from('contacts').delete().eq('id', id);
     if (res.error) console.error('deleteContact', res.error);
+  },
+  updateContactNote: async function(id, fields) {
+    var res = await sb.from('timeline').update(fields).eq('id', id);
+    if (res.error) console.error('updateContactNote', res.error);
+  },
+  deleteContactNote: async function(id) {
+    var res = await sb.from('timeline').delete().eq('id', id);
+    if (res.error) console.error('deleteContactNote', res.error);
   },
   insertContactNote: async function(n) {
     var res = await sb.from('timeline').insert({
