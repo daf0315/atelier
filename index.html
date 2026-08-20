@@ -2437,9 +2437,102 @@
   /* ════════════════════════════════════════════════════════════════
      TODAY v13 — narrow queue + summary bar + next-action column
      ════════════════════════════════════════════════════════════════ */
+  .today-split {
+    display: grid;
+    grid-template-columns: minmax(0, 760px) minmax(300px, 1fr);
+    gap: 26px;
+    align-items: start;
+  }
   .today-narrow {
     max-width: 760px;
-    margin: 0 auto;
+  }
+  .today-cal-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 14px 16px;
+    position: sticky;
+    top: 16px;
+  }
+  .today-cal-title {
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .today-cal-scroll {
+    max-height: 72vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .cal-month { margin-bottom: 18px; }
+  .cal-month-title {
+    font-family: Georgia, serif;
+    font-size: 14px;
+    color: var(--ink);
+    margin-bottom: 6px;
+    position: sticky;
+    top: 0;
+    background: white;
+    padding: 4px 0;
+    z-index: 1;
+  }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .cal-dow {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    color: var(--ink-mute);
+    text-align: center;
+    padding: 2px 0;
+  }
+  .cal-day {
+    min-height: 40px;
+    border: 1px solid var(--line-soft);
+    border-radius: 5px;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    padding: 3px 5px;
+    background: var(--cream);
+  }
+  .cal-day.blank { border: none; background: transparent; }
+  .cal-day.cal-today {
+    border-color: var(--sunrise);
+    background: var(--sunrise-soft);
+    font-weight: 700;
+    color: var(--sunrise);
+  }
+  .queue-add-btn-sm {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--r-pill);
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  .queue-add-btn-sm:hover { border-color: var(--sunrise); color: var(--sunrise); }
+  .horizon-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 10px 16px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .horizon-strip:hover { border-color: var(--sunrise); }
+  @media (max-width: 1080px) {
+    .today-split { grid-template-columns: 1fr; }
+    .today-cal-card { position: static; }
   }
   .pipe-summary-bar {
     display: flex;
@@ -3024,6 +3117,7 @@
     <!-- ═══════════════════════════════════════════════════════════════
          TODAY — narrow centered queue (HubSpot-style) + summary bar
          ═══════════════════════════════════════════════════════════════ -->
+    <div class="today-split">
     <div class="today-narrow">
 
       <!-- Pipeline summary bar -->
@@ -3035,6 +3129,10 @@
       </div>
 
       <!-- Urgency-grouped task queue -->
+      <div style="margin-bottom:14px;">
+        <button class="queue-add-btn-sm" onclick="openTaskModal('general')">+ Add task</button>
+      </div>
+
       <div class="queue-group" id="queue-overdue-group" style="display:none;">
         <div class="queue-group-title rose-title">Overdue <span class="queue-group-count" id="queue-overdue-count"></span></div>
         <div id="queue-overdue"></div>
@@ -3048,6 +3146,15 @@
       <div class="queue-group" id="queue-upcoming-group" style="display:none;">
         <div class="queue-group-title">Coming up <span class="queue-group-count" id="queue-upcoming-count"></span></div>
         <div id="queue-upcoming"></div>
+      </div>
+
+      <div id="queue-horizon-group" style="display:none;margin-bottom:22px;">
+        <div class="horizon-strip" onclick="toggleHorizonStrip()">
+          <span>🗓 On the horizon</span>
+          <span class="completed-strip-count" id="horizon-count">0</span>
+          <span class="completed-strip-caret" id="horizon-caret">▾</span>
+        </div>
+        <div id="queue-horizon" style="display:none;margin-top:8px;"></div>
       </div>
 
       <div class="queue-group" id="queue-someday-group" style="display:none;">
@@ -3066,10 +3173,12 @@
 
       <div id="queue-loading" style="text-align:center;color:var(--ink-mute);font-size:12px;font-style:italic;padding:16px;">Loading your data…</div>
 
-      <div class="queue-add-row">
-        <button class="queue-add-btn" onclick="openTaskModal('general')">+ Add task</button>
-      </div>
+    </div>
 
+    <div class="today-cal-card">
+      <div class="today-cal-title">Calendar</div>
+      <div class="today-cal-scroll" id="today-cal"></div>
+    </div>
     </div>
 
     <!-- Divider between primary and secondary tiers -->
@@ -4626,6 +4735,7 @@
     if (target) target.style.display = 'block';
     if (tab === 'contacts') renderContactsList();
     if (tab === 'pipeline') { recalculateSummary(); renderNextActions(); }
+    if (tab === 'today') { setTimeout(renderTodayCalendar, 40); }
     if (tab === 'library') renderLibrary();
     window.scrollTo(0, 0);
   };
@@ -6915,13 +7025,14 @@
     var open = TASKS.filter(function(t) { return !t.done; });
     var done = TASKS.filter(function(t) { return t.done; });
 
-    var overdue = [], dueToday = [], upcoming = [], someday = [];
+    var overdue = [], dueToday = [], upcoming = [], horizon = [], someday = [];
     open.forEach(function(t) {
       var d = _daysUntil(t.followUpBy);
       if (d === null) someday.push(t);
       else if (d < 0) overdue.push(t);
       else if (d === 0) dueToday.push(t);
-      else upcoming.push(t);
+      else if (d <= 7) upcoming.push(t);
+      else horizon.push(t);
     });
     function byDate(a, b) {
       var da = _daysUntil(a.followUpBy), db = _daysUntil(b.followUpBy);
@@ -6930,7 +7041,7 @@
       if (db === null) return -1;
       return da - db;
     }
-    overdue.sort(byDate); dueToday.sort(byDate); upcoming.sort(byDate);
+    overdue.sort(byDate); dueToday.sort(byDate); upcoming.sort(byDate); horizon.sort(byDate);
 
     function fillGroup(groupId, bodyId, countId, list, extra) {
       var group = document.getElementById(groupId);
@@ -6948,6 +7059,18 @@
     fillGroup('queue-upcoming-group', 'queue-upcoming', 'queue-upcoming-count', upcoming);
     fillGroup('queue-someday-group', 'queue-someday', 'queue-someday-count', someday);
 
+    // Beyond 7 days: collapsed behind "On the horizon +N"
+    var hg = document.getElementById('queue-horizon-group');
+    if (hg) {
+      if (horizon.length === 0) { hg.style.display = 'none'; }
+      else {
+        hg.style.display = 'block';
+        _setText('horizon-count', '+' + horizon.length);
+        var hbody = document.getElementById('queue-horizon');
+        if (hbody) hbody.innerHTML = horizon.map(renderActionItem).join('');
+      }
+    }
+
     // Completed-today strip (collapsed by default; permanent record lives on deal/contact pages)
     var todayStr = new Date().toISOString().slice(0, 10);
     var doneToday = done.filter(function(t) { return t.completedOn === todayStr; });
@@ -6964,7 +7087,41 @@
     }
 
     renderNextActions();
+    if (!_calRendered) renderTodayCalendar();
   }
+
+  var _calRendered = false;
+  window.renderTodayCalendar = function() {
+    var wrap = document.getElementById('today-cal');
+    if (!wrap) return;
+    var now = new Date();
+    var todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    var MO = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var DOW = ['S','M','T','W','T','F','S'];
+    var html = '';
+    for (var off = -6; off <= 6; off++) {
+      var first = new Date(now.getFullYear(), now.getMonth() + off, 1);
+      var y = first.getFullYear(), mo = first.getMonth();
+      var daysInMonth = new Date(y, mo + 1, 0).getDate();
+      var lead = first.getDay();
+      var isCurrent = off === 0;
+      html += '<div class="cal-month' + (isCurrent ? ' cal-current' : '') + '" id="cal-m-' + off + '">' +
+        '<div class="cal-month-title">' + MO[mo] + ' ' + y + '</div>' +
+        '<div class="cal-grid">' +
+        DOW.map(function(d) { return '<div class="cal-dow">' + d + '</div>'; }).join('');
+      for (var b = 0; b < lead; b++) html += '<div class="cal-day blank"></div>';
+      for (var day = 1; day <= daysInMonth; day++) {
+        var ds = y + '-' + String(mo + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+        html += '<div class="cal-day' + (ds === todayStr ? ' cal-today' : '') + '" data-date="' + ds + '">' + day + '</div>';
+      }
+      html += '</div></div>';
+    }
+    wrap.innerHTML = html;
+    // open scrolled to the current month
+    var cur = document.getElementById('cal-m-0');
+    if (cur) wrap.scrollTop = cur.offsetTop - wrap.offsetTop;
+    _calRendered = true;
+  };
 
   var expandedDeals = {};
 
@@ -7002,6 +7159,15 @@
     });
     renderDealTaskDrawers();
   }
+
+  window.toggleHorizonStrip = function() {
+    var body = document.getElementById('queue-horizon');
+    var caret = document.getElementById('horizon-caret');
+    if (!body) return;
+    var open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'block';
+    if (caret) caret.textContent = open ? '▾' : '▴';
+  };
 
   window.toggleCompletedStrip = function() {
     var body = document.getElementById('queue-completed');
