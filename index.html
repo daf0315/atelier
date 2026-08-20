@@ -3091,12 +3091,21 @@
     <a class="subnav-item active" data-work-tab="today" onclick="setWorkTab('today', this)">Today</a>
     <a class="subnav-item" data-work-tab="pipeline" onclick="setWorkTab('pipeline', this)">Pipeline</a>
     <a class="subnav-item" data-work-tab="library" onclick="setWorkTab('library', this)">Library</a>
+    <a class="subnav-item" data-work-tab="radar" onclick="setWorkTab('radar', this)">Radar</a>
     <a class="subnav-item coming-soon">Capital</a>
     <a class="subnav-item coming-soon">Comps</a>
     <a class="subnav-item" data-work-tab="contacts" onclick="setWorkTab('contacts', this)">Contacts</a>
   </div>
 
   <main>
+
+    <script>
+      // Guard: this file opened from disk is a live app pointed at the real database.
+      // Make that unmissable so work never happens in a downloaded copy by accident.
+      if (location.protocol === 'file:') {
+        document.write('<div style="position:sticky;top:0;z-index:9999;background:#B3261E;color:#fff;padding:12px 20px;font-size:13.5px;font-weight:600;text-align:center;font-family:-apple-system,sans-serif;">⚠️ This is a downloaded copy on your computer — don\'t work here. Upload it to GitHub, then use <a href="https://daf0315.github.io/atelier/" style="color:#fff;text-decoration:underline;">daf0315.github.io/atelier</a></div>');
+      }
+    </script>
 
     <div class="work-tab" id="work-tab-today">
 
@@ -3129,8 +3138,18 @@
       </div>
 
       <!-- Urgency-grouped task queue -->
-      <div style="margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div class="today-cal-title" style="margin-bottom:0;">Tasks</div>
         <button class="queue-add-btn-sm" onclick="openTaskModal('general')">+ Add task</button>
+      </div>
+
+      <div id="queue-completed-group" style="display:none;margin-bottom:18px;">
+        <div class="completed-strip" onclick="toggleCompletedStrip()">
+          <span>✓ Completed today</span>
+          <span class="completed-strip-count" id="completed-count">0</span>
+          <span class="completed-strip-caret" id="completed-caret">▾</span>
+        </div>
+        <div id="queue-completed" style="display:none;margin-top:8px;"></div>
       </div>
 
       <div class="queue-group" id="queue-overdue-group" style="display:none;">
@@ -3162,15 +3181,6 @@
         <div id="queue-someday"></div>
       </div>
 
-      <div id="queue-completed-group" style="display:none;margin-bottom:22px;">
-        <div class="completed-strip" onclick="toggleCompletedStrip()">
-          <span>✓ Completed today</span>
-          <span class="completed-strip-count" id="completed-count">0</span>
-          <span class="completed-strip-caret" id="completed-caret">▾</span>
-        </div>
-        <div id="queue-completed" style="display:none;margin-top:8px;"></div>
-      </div>
-
       <div id="queue-loading" style="text-align:center;color:var(--ink-mute);font-size:12px;font-style:italic;padding:16px;">Loading your data…</div>
 
     </div>
@@ -3181,12 +3191,12 @@
     </div>
     </div>
 
-    <!-- Divider between primary and secondary tiers -->
-    <div class="tier-divider">
-      <span>When time allows</span>
-    </div>
 
-    <!-- Full opportunities (secondary tier) -->
+
+    </div><!-- /#work-tab-today -->
+
+    <div class="work-tab" id="work-tab-radar" style="display:none;">
+      <!-- Full opportunities (secondary tier) -->
     <section class="section">
       <div class="section-head">
         <div class="section-title">Opportunities <span class="section-count">5 surfaced today</span> <span class="pill" style="font-size:11px;"><span class="dot"></span>Scanner ran 2 hrs ago</span></div>
@@ -3260,10 +3270,7 @@
         </div>
       </div>
     </section>
-
-    <p class="footnote">Atelier prototype · sample data · changes are session-only (don't persist on refresh)</p>
-
-    </div><!-- /#work-tab-today -->
+    </div><!-- /#work-tab-radar -->
 
     <div class="work-tab" id="work-tab-pipeline" style="display:none;">
 
