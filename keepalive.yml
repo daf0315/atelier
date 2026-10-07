@@ -1,0 +1,27 @@
+# Atelier · Supabase keep-alive
+# Pings the database twice a week so the free-tier 7-day idle pause never triggers.
+# The key below is the same publishable key already public in the app — no new exposure.
+
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: '0 13 * * 1,4'   # Mondays + Thursdays, 9:00 AM ET
+  workflow_dispatch: {}       # allows manual "Run workflow" button for testing
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: sb_publishable_0UQxIeLkREAjifo5Ghebyg_ek6httEx" \
+            "https://qiodhcugrvlkjslzzama.supabase.co/rest/v1/deals?select=id&limit=1")
+          echo "Supabase responded with HTTP $status"
+          # Any response means the project received traffic — that resets the idle clock.
+          if [ "$status" -ge 200 ] && [ "$status" -lt 500 ]; then
+            echo "Keep-alive successful."
+          else
+            echo "Unexpected status — project may be paused or unreachable." && exit 1
+          fi
