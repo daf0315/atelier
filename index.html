@@ -3157,14 +3157,14 @@
         <div id="queue-overdue"></div>
       </div>
 
-      <div class="queue-group" id="queue-today-group" style="display:none;">
-        <div class="queue-group-title sunrise-title">Due today <span class="queue-group-count" id="queue-today-count"></span></div>
-        <div id="queue-today"></div>
+      <div class="queue-group" id="queue-quick-group" style="display:none;">
+        <div class="queue-group-title sunrise-title">⚡ Quick hits <span class="queue-group-count" id="queue-quick-count"></span></div>
+        <div id="queue-quick"></div>
       </div>
 
-      <div class="queue-group" id="queue-upcoming-group" style="display:none;">
-        <div class="queue-group-title">Coming up <span class="queue-group-count" id="queue-upcoming-count"></span></div>
-        <div id="queue-upcoming"></div>
+      <div class="queue-group" id="queue-focus-group" style="display:none;">
+        <div class="queue-group-title">🧠 Focus work <span class="queue-group-count" id="queue-focus-count"></span></div>
+        <div id="queue-focus"></div>
       </div>
 
       <div id="queue-horizon-group" style="display:none;margin-bottom:22px;">
@@ -3174,11 +3174,6 @@
           <span class="completed-strip-caret" id="horizon-caret">▾</span>
         </div>
         <div id="queue-horizon" style="display:none;margin-top:8px;"></div>
-      </div>
-
-      <div class="queue-group" id="queue-someday-group" style="display:none;">
-        <div class="queue-group-title">No date <span class="queue-group-count" id="queue-someday-count"></span></div>
-        <div id="queue-someday"></div>
       </div>
 
       <div id="queue-loading" style="text-align:center;color:var(--ink-mute);font-size:12px;font-style:italic;padding:16px;">Loading your data…</div>
@@ -5845,7 +5840,7 @@
     if (followUpBy) {
       var fuTask = {
         id: 't' + Date.now().toString(36),
-        type: 'owed-response',
+        type: 'owed-response', effort: 'quick',
         title: 'Follow up: ' + title,
         contactId: contactId,
         dealId: null,
@@ -6159,6 +6154,7 @@
   }
 
   function renderActionItem(task) {
+    var effortBadge = (task.effort === 'focus') ? '<span title="Focus work" style="font-size:11px;margin-right:4px;">🧠</span>' : '';
     var days = _daysUntil(task.followUpBy);
     var overdueClass = (days !== null && days < 0) ? ' overdue' : '';
     var doneClass = task.done ? ' done' : '';
@@ -6181,7 +6177,7 @@
     return '<div class="action-item' + overdueClass + doneClass + '" onclick="' + rowClick + '">' +
       '<div class="action-check" onclick="' + checkClick + '"></div>' +
       '<div class="action-item-body">' +
-        '<div class="action-item-title">' + escapeHtml(task.title) + '</div>' +
+        '<div class="action-item-title">' + effortBadge + escapeHtml(task.title) + '</div>' +
         '<div class="action-item-meta">' +
           contactTag + dealTag + daysBadge +
           (task.done && task.completionNote ? '<span style="font-style:italic;color:var(--ink-mute);">✓ ' + escapeHtml(task.completionNote) + '</span>' : '') +
@@ -6278,7 +6274,7 @@
     });
     TASKS = (dbTasks || []).map(function(r) {
       return { id: r.id, type: r.type, title: r.title,
-               contactId: r.contact_id, dealId: r.deal_id,
+               contactId: r.contact_id, dealId: r.deal_id, effort: r.effort || 'quick',
                followUpBy: r.follow_up_by, createdOn: (r.created_at || '').slice(0, 10),
                done: r.done, completedOn: r.completed_on, completionNote: r.completion_note };
     });
@@ -7032,14 +7028,14 @@
     var open = TASKS.filter(function(t) { return !t.done; });
     var done = TASKS.filter(function(t) { return t.done; });
 
-    var overdue = [], dueToday = [], upcoming = [], horizon = [], someday = [];
+    // Overdue outranks everything; then effort lanes (due within 7 days or undated); beyond 7d → horizon
+    var overdue = [], quick = [], focus = [], horizon = [];
     open.forEach(function(t) {
       var d = _daysUntil(t.followUpBy);
-      if (d === null) someday.push(t);
-      else if (d < 0) overdue.push(t);
-      else if (d === 0) dueToday.push(t);
-      else if (d <= 7) upcoming.push(t);
-      else horizon.push(t);
+      if (d !== null && d < 0) { overdue.push(t); return; }
+      if (d !== null && d > 7) { horizon.push(t); return; }
+      if ((t.effort || 'quick') === 'focus') focus.push(t);
+      else quick.push(t);
     });
     function byDate(a, b) {
       var da = _daysUntil(a.followUpBy), db = _daysUntil(b.followUpBy);
@@ -7048,7 +7044,7 @@
       if (db === null) return -1;
       return da - db;
     }
-    overdue.sort(byDate); dueToday.sort(byDate); upcoming.sort(byDate); horizon.sort(byDate);
+    overdue.sort(byDate); quick.sort(byDate); focus.sort(byDate); horizon.sort(byDate);
 
     function fillGroup(groupId, bodyId, countId, list, extra) {
       var group = document.getElementById(groupId);
@@ -7062,9 +7058,10 @@
     }
 
     fillGroup('queue-overdue-group', 'queue-overdue', 'queue-overdue-count', overdue);
-    fillGroup('queue-today-group', 'queue-today', 'queue-today-count', dueToday);
-    fillGroup('queue-upcoming-group', 'queue-upcoming', 'queue-upcoming-count', upcoming);
-    fillGroup('queue-someday-group', 'queue-someday', 'queue-someday-count', someday);
+    fillGroup('queue-quick-group', 'queue-quick', 'queue-quick-count', quick);
+    fillGroup('queue-focus-group', 'queue-focus', 'queue-focus-count', focus);
+    _setText('queue-quick-count', '· ' + quick.length + ' left');
+    _setText('queue-focus-count', '· ' + focus.length + ' left');
 
     // Beyond 7 days: collapsed behind "On the horizon +N"
     var hg = document.getElementById('queue-horizon-group');
@@ -7236,7 +7233,7 @@
     if (!title) { if (titleEl) titleEl.focus(); return; }
     var task = {
       id: 't' + Date.now().toString(36),
-      type: 'deal-followup',
+      type: 'deal-followup', effort: 'quick',
       title: title,
       contactId: null,
       dealId: dealId,
@@ -7378,6 +7375,11 @@
       '<div class="modal-body">' +
         '<div class="field"><label class="field-label required">Title</label>' +
           '<input class="field-input" id="et-title" value="' + escapeHtml(t.title) + '" /></div>' +
+        '<div class="field"><label class="field-label">Effort</label>' +
+          '<select class="field-select" id="et-effort">' +
+            '<option value="quick"' + ((t.effort || 'quick') === 'quick' ? ' selected' : '') + '>⚡ Quick hit</option>' +
+            '<option value="focus"' + (t.effort === 'focus' ? ' selected' : '') + '>🧠 Focus work</option>' +
+          '</select></div>' +
         '<div class="field"><label class="field-label">Type</label>' +
           '<select class="field-select" id="et-type">' +
             '<option value="owed-response"' + (t.type === 'owed-response' ? ' selected' : '') + '>Owed response</option>' +
@@ -7425,12 +7427,13 @@
     if (!title) { alert('Title is required.'); return; }
     t.title = title;
     t.type = document.getElementById('et-type').value;
+    t.effort = document.getElementById('et-effort').value || 'quick';
     t.contactId = document.getElementById('et-contact').value || null;
     t.dealId = document.getElementById('et-deal').value || null;
     t.followUpBy = document.getElementById('et-followup').value || null;
     if (window._db && window._db.updateTask) {
       window._db.updateTask(t.id, {
-        title: t.title, type: t.type,
+        title: t.title, type: t.type, effort: t.effort,
         contact_id: _uuidOrNull(t.contactId), deal_id: _uuidOrNull(t.dealId),
         follow_up_by: t.followUpBy
       });
@@ -7468,6 +7471,11 @@
       '<div class="modal-body">' +
         '<div class="field"><label class="field-label required">Title</label>' +
           '<input class="field-input" id="nt-title" placeholder="What needs to happen?" /></div>' +
+        '<div class="field"><label class="field-label">Effort</label>' +
+          '<select class="field-select" id="nt-effort">' +
+            '<option value="quick">⚡ Quick hit — follow-up, call, short email</option>' +
+            '<option value="focus">🧠 Focus work — documents, review, model time</option>' +
+          '</select></div>' +
         '<div class="field"><label class="field-label required">Type</label>' +
           '<select class="field-select" id="nt-type">' +
             '<option value="owed-response"' + (defaultType === 'owed-response' ? ' selected' : '') + '>Owed response</option>' +
@@ -7507,6 +7515,7 @@
       id: 't' + Date.now().toString(36),
       type: document.getElementById('nt-type').value,
       title: title,
+      effort: document.getElementById('nt-effort').value || 'quick',
       contactId: document.getElementById('nt-contact').value || null,
       dealId: document.getElementById('nt-deal').value || null,
       followUpBy: document.getElementById('nt-followup').value || null,
@@ -7638,6 +7647,7 @@ window._db = {
       contact_id: isUuid(t.contactId) ? t.contactId : null,
       deal_id: isUuid(t.dealId) ? t.dealId : null,
       follow_up_by: t.followUpBy || null,
+      effort: t.effort || 'quick',
       done: !!t.done
     };
     var res = await sb.from('tasks').insert(payload).select().single();
